@@ -8,9 +8,10 @@ from tqdm import tqdm
 
 from models.model_factory import get_model, count_parameters
 from data.dataset_loader import create_dataloaders
-from utils.metrics import evaluate_model_performance
+from utils.metrics import evaluate_model_performance, save_evaluation_matrix
 from xai.grad_cam import GradCAM
 from xai.visualizer import overlay_heatmap, plot_xai_comparison
+import numpy as np
 
 def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, batch_size=32, lr=1e-4, device='cuda'):
     """
@@ -33,8 +34,17 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     best_val_f1 = 0.0
-    checkpoint_dir = os.path.join("checkpoints", model_name)
+    checkpoint_dir = os.path.join("saved_models")
+    results_dir = os.path.join("results")
     os.makedirs(checkpoint_dir, exist_ok=True)
+    os.makedirs(results_dir, exist_ok=True)
+
+    history = {
+        'train_loss': [],
+        'train_acc': [],
+        'val_loss': [],
+        'val_acc': []
+    }
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -68,10 +78,15 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
         print(f"[Epoch {epoch:02d}] Train Loss: {train_loss:.4f} | Train Acc: {train_acc*100:.2f}% | "
               f"Val Acc: {val_metrics['accuracy']*100:.2f}% | Val F1: {val_metrics['f1_score']:.4f} | FPS: {val_metrics['fps']:.1f}")
 
+        history['train_loss'].append(train_loss)
+        history['train_acc'].append(train_acc)
+        history['val_acc'].append(val_metrics['accuracy'])
+        history['val_loss'].append(1.0 - val_metrics['accuracy'])
+
         # Save Best Model Checkpoint
         if val_metrics['f1_score'] >= best_val_f1:
             best_val_f1 = val_metrics['f1_score']
-            checkpoint_path = os.path.join(checkpoint_dir, "best_model.pth")
+            checkpoint_path = os.path.join(checkpoint_dir, f"{model_name}_drowsiness_model.pth")
             torch.save({
                 'epoch': epoch,
                 'model_name': model_name,
@@ -81,6 +96,11 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
                 'class_names': class_names
             }, checkpoint_path)
             print(f"  [✓] Saved Best Model Checkpoint to: {checkpoint_path}")
+
+    # Final Evaluation & Evaluation Matrix Artifact Generation
+    print("\n[*] Computing Final Evaluation Matrix and Generating Artifacts...")
+    final_val_metrics = evaluate_model_performance(model, val_loader, device=device)
+    save_evaluation_matrix(final_val_metrics, history=history, class_names=class_names, output_dir=results_dir)
 
     # Generate XAI Verification Sample
     print("\n[*] Generating XAI Grad-CAM Verification Sample...")
@@ -100,12 +120,12 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
     blended_rgb = blended_bgr[:, :, ::-1]
     orig_rgb = (orig_np * 255).astype(np.uint8)
 
-    xai_sample_path = os.path.join(checkpoint_dir, "xai_verification_sample.png")
+    xai_sample_path = os.path.join(results_dir, "xai_verification_sample.png")
     plot_xai_comparison(orig_rgb, heatmap, blended_rgb, class_names[pred_class_idx], confidence, model_name=model_name, save_path=xai_sample_path)
     grad_cam.remove_hooks()
 
     print(f"[✓] XAI Verification Sample Saved to: {xai_sample_path}")
-    print("[✓] Training Complete!")
+    print("[✓] Training & Evaluation Matrix Generation Complete!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Drowsiness Detection Deep Learning Models with XAI.")

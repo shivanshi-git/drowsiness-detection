@@ -32,24 +32,51 @@ A comprehensive Deep Learning framework for real-time **Driver Drowsiness Detect
 pip install -r requirements.txt
 ```
 
-### 2. Preprocess Raw Datasets (Mixed Images & Videos)
-Place your downloaded MRL, Kaggle, NTHU, or UTA-RLDD folders inside a `raw_data` folder, then run:
+### 2. Prepare Your Custom Dataset (Ignored by Git)
+Place raw images/videos in `raw_data/` and preprocess them, or directly structure your processed dataset in `processed_dataset/`:
+```text
+processed_dataset/
+├── train/
+│   ├── alert/
+│   └── drowsy/
+└── val/
+    ├── alert/
+    └── drowsy/
+```
+*(Note: `raw_data/` and `processed_dataset/` are listed in `.gitignore` to ensure dataset files remain local and are NOT pushed to GitHub).*
+
+To preprocess mixed images/videos from `raw_data/`:
 ```bash
 python data/preprocess_mixed_data.py --raw_dir raw_data --out_dir processed_dataset
 ```
 
-### 3. Train Model Architecture
+### 3. Train Model & Generate Evaluation Matrix
 Train any model (e.g. `vgg16`, `mobilenet_v2`, `resnet18`, `custom_cnn`):
 ```bash
 python train.py --model vgg16 --dataset_dir processed_dataset --epochs 10 --batch_size 32
 ```
+This automatically:
+- Saves the best trained PyTorch model checkpoint to `saved_models/vgg16_drowsiness_model.pth`.
+- Computes and exports the complete **Evaluation Matrix** to `results/`:
+  - `confusion_matrix.png` (Confusion Matrix Heatmap)
+  - `roc_curve.png` (ROC Curve & AUC Score)
+  - `training_curves.png` (Loss & Accuracy Epoch History)
+  - `evaluation_summary.json` & `evaluation_report.txt` (Detailed Precision, Recall, F1, Accuracy, Latency & FPS)
+  - `xai_verification_sample.png` (Grad-CAM Heatmap verification sample)
 
-### 4. Single Image Prediction & Grad-CAM Heatmap
+### 4. Commit and Push Trained Model & Evaluation Matrix to Repository
+```bash
+git add saved_models/ results/ train.py utils/metrics.py .gitignore README.md
+git commit -m "Add trained drowsiness model, evaluation matrix, and pipeline updates"
+git push origin main
+```
+
+### 5. Single Image Prediction & Grad-CAM Heatmap
 ```bash
 python predict.py --image test_driver.jpg --model vgg16 --out output_xai.jpg
 ```
 
-### 5. Launch Streamlit Interactive Web Application
+### 6. Launch Streamlit Interactive Web Dashboard
 ```bash
 streamlit run app.py
 ```

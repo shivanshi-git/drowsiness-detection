@@ -31,7 +31,13 @@ checkpoints/
 *.onnx
 *.engine
 
-# Datasets & Raw Media
+# Allow tracking saved_models and results directory artifacts for git push
+!saved_models/
+!saved_models/*
+!results/
+!results/*
+
+# Datasets & Raw Media (WILL NOT BE PUSHED TO REPO)
 raw_data/
 processed_dataset/
 *.mp4

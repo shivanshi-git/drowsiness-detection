@@ -13,8 +13,11 @@ def get_data_transforms(img_size=(128, 128)):
         transforms.Resize(img_size),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(degrees=15),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
+        transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3),
         transforms.ToTensor(),
+        transforms.RandomErasing(p=0.2, scale=(0.02, 0.1)),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
     ])
@@ -43,10 +46,20 @@ def create_dataloaders(dataset_dir="processed_dataset", batch_size=32, num_worke
     train_dataset = datasets.ImageFolder(root=train_dir, transform=train_transform)
     val_dataset = datasets.ImageFolder(root=val_dir, transform=val_transform)
 
+    import numpy as np
+    from torch.utils.data import WeightedRandomSampler
+
+    # Calculate class weights to handle imbalanced datasets (e.g. 120k vs 86k)
+    targets = train_dataset.targets
+    class_counts = np.bincount(targets)
+    class_weights = 1. / class_counts
+    sample_weights = [class_weights[t] for t in targets]
+    sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        sampler=sampler,
         num_workers=num_workers,
         pin_memory=True
     )

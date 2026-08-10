@@ -31,24 +31,35 @@ class ResBlock(nn.Module):
 class CustomCNN(nn.Module):
     """
     Enhanced Deep Residual Custom CNN Architecture for Drowsiness Detection.
-    Features 4-stage Residual Blocks with Skip Connections, Batch Normalization,
-    and Dropout Regularization for high precision and fast convergence.
+    Features 4-stage Residual Blocks (2 blocks per stage) with Skip Connections, 
+    Batch Normalization, and Dropout Regularization for high precision.
     """
     def __init__(self, num_classes=2, in_channels=3):
         super(CustomCNN, self).__init__()
 
         self.prep = nn.Sequential(
-            nn.Conv2d(in_channels, 32, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(in_channels, 64, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(64),
             nn.ReLU(inplace=True)
         )
 
-        self.layer1 = ResBlock(32, 64, stride=2)   # 64x64
-        self.layer2 = ResBlock(64, 128, stride=2)  # 32x32
-        self.layer3 = ResBlock(128, 256, stride=2) # 16x16
-        self.layer4 = ResBlock(256, 512, stride=2) # 8x8
+        self.layer1 = nn.Sequential(
+            ResBlock(64, 64, stride=1),
+            ResBlock(64, 64, stride=1)
+        )
+        self.layer2 = nn.Sequential(
+            ResBlock(64, 128, stride=2),
+            ResBlock(128, 128, stride=1)
+        )
+        self.layer3 = nn.Sequential(
+            ResBlock(128, 256, stride=2),
+            ResBlock(256, 256, stride=1)
+        )
+        self.layer4 = nn.Sequential(
+            ResBlock(256, 512, stride=2),
+            ResBlock(512, 512, stride=1)
+        )
 
-        # Sequential container for easy Grad-CAM layer indexing
         self.features = nn.Sequential(
             self.prep,     # [0]
             self.layer1,   # [1]
@@ -59,12 +70,12 @@ class CustomCNN(nn.Module):
         )
 
         self.classifier = nn.Sequential(
-            nn.Dropout(0.4),
-            nn.Linear(512, 128),
-            nn.BatchNorm1d(128),
+            nn.Dropout(0.5),
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.3),
-            nn.Linear(128, num_classes)
+            nn.Dropout(0.4),
+            nn.Linear(256, num_classes)
         )
 
     def forward(self, x):

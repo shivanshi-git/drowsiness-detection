@@ -204,6 +204,8 @@ class MixedDataPreprocessor:
             alert_files = alert_files[:max_samples_per_class]
             drowsy_files = drowsy_files[:max_samples_per_class]
             print(f"[*] Subsampling to balanced {len(alert_files)} Alert and {len(drowsy_files)} Drowsy samples for efficient model training.")
+        else:
+            print(f"[*] Processing ALL {len(alert_files)} Alert and {len(drowsy_files)} Drowsy samples (UNBALANCED).")
 
         all_media = [(f, "0_alert") for f in alert_files] + [(f, "1_drowsy") for f in drowsy_files]
         np.random.shuffle(all_media)

@@ -17,7 +17,16 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
     """
     Main training and validation loop for Driver Drowsiness Detection.
     """
-    device = torch.device('cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu')
+    if device == 'cuda':
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "[!] CUDA device requested, but PyTorch cannot access NVIDIA GPU!\n"
+                "    Reason: NVIDIA kernel driver module is not loaded in the running Linux kernel (6.17.0-1026-nvidia).\n"
+                "    To fix: Run 'sudo dkms autoinstall && sudo modprobe nvidia' with OS admin privileges, then reinstall CUDA PyTorch."
+            )
+        device = torch.device('cuda')
+    else:
+        device = torch.device(device)
     print(f"[*] Training Model: '{model_name}' on Device: {device}")
 
     # Create DataLoaders

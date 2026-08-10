@@ -29,15 +29,15 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
 
     print(f"[*] Trainable Parameters: {count_parameters(model):.2f} Million")
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
     best_val_f1 = 0.0
     checkpoint_dir = os.path.join("saved_models")
-    results_dir = os.path.join("results")
+    model_results_dir = os.path.join("results", model_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
-    os.makedirs(results_dir, exist_ok=True)
+    os.makedirs(model_results_dir, exist_ok=True)
 
     history = {
         'train_loss': [],
@@ -98,34 +98,38 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
             print(f"  [✓] Saved Best Model Checkpoint to: {checkpoint_path}")
 
     # Final Evaluation & Evaluation Matrix Artifact Generation
-    print("\n[*] Computing Final Evaluation Matrix and Generating Artifacts...")
+    print(f"\n[*] Computing Final Evaluation Matrix and Generating Artifacts for '{model_name}'...")
     final_val_metrics = evaluate_model_performance(model, val_loader, device=device)
-    save_evaluation_matrix(final_val_metrics, history=history, class_names=class_names, output_dir=results_dir)
+    summary_dict = save_evaluation_matrix(final_val_metrics, history=history, class_names=class_names, output_dir=model_results_dir)
 
     # Generate XAI Verification Sample
-    print("\n[*] Generating XAI Grad-CAM Verification Sample...")
-    grad_cam = GradCAM(model, target_layer)
-    sample_inputs, sample_targets = next(iter(val_loader))
-    sample_img_tensor = sample_inputs[0:1].to(device)
-    
-    heatmap, pred_class_idx, confidence = grad_cam.generate_heatmap(sample_img_tensor)
-    
-    # Save diagnostic visualization
-    orig_np = sample_inputs[0].permute(1, 2, 0).numpy()
-    orig_np = (orig_np * np.array([0.229, 0.224, 0.225])) + np.array([0.485, 0.456, 0.406])
-    orig_np = np.clip(orig_np, 0, 1)
-    orig_bgr = (orig_np[:, :, ::-1] * 255).astype(np.uint8)
+    print(f"\n[*] Generating Grad-CAM Heatmap for '{model_name}'...")
+    try:
+        grad_cam = GradCAM(model, target_layer)
+        sample_inputs, sample_targets = next(iter(val_loader))
+        sample_img_tensor = sample_inputs[0:1].to(device)
+        
+        heatmap, pred_class_idx, confidence = grad_cam.generate_heatmap(sample_img_tensor)
+        
+        # Save diagnostic visualization
+        orig_np = sample_inputs[0].permute(1, 2, 0).numpy()
+        orig_np = (orig_np * np.array([0.229, 0.224, 0.225])) + np.array([0.485, 0.456, 0.406])
+        orig_np = np.clip(orig_np, 0, 1)
+        orig_bgr = (orig_np[:, :, ::-1] * 255).astype(np.uint8)
 
-    blended_bgr, _ = overlay_heatmap(orig_bgr, heatmap)
-    blended_rgb = blended_bgr[:, :, ::-1]
-    orig_rgb = (orig_np * 255).astype(np.uint8)
+        blended_bgr, _ = overlay_heatmap(orig_bgr, heatmap)
+        blended_rgb = blended_bgr[:, :, ::-1]
+        orig_rgb = (orig_np * 255).astype(np.uint8)
 
-    xai_sample_path = os.path.join(results_dir, "xai_verification_sample.png")
-    plot_xai_comparison(orig_rgb, heatmap, blended_rgb, class_names[pred_class_idx], confidence, model_name=model_name, save_path=xai_sample_path)
-    grad_cam.remove_hooks()
+        xai_sample_path = os.path.join(model_results_dir, f"{model_name}_xai_heatmap.png")
+        plot_xai_comparison(orig_rgb, heatmap, blended_rgb, class_names[pred_class_idx], confidence, model_name=model_name, save_path=xai_sample_path)
+        grad_cam.remove_hooks()
+        print(f"[✓] XAI Grad-CAM Heatmap Saved to: {xai_sample_path}")
+    except Exception as e:
+        print(f"[!] Warning: Grad-CAM generation skipped for {model_name}: {e}")
 
-    print(f"[✓] XAI Verification Sample Saved to: {xai_sample_path}")
-    print("[✓] Training & Evaluation Matrix Generation Complete!")
+    print(f"[✓] Training & Evaluation Matrix Generation Complete for '{model_name}'!")
+    return summary_dict
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Drowsiness Detection Deep Learning Models with XAI.")

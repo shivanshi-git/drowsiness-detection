@@ -40,6 +40,12 @@ checkpoints/
 # Datasets & Raw Media (WILL NOT BE PUSHED TO REPO)
 raw_data/
 processed_dataset/
+archive/
+archive(1)/
+archive(2)/
+archive(3)/
+archive*/
+archive*
 *.mp4
 *.avi
 *.mov

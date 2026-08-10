@@ -22,7 +22,7 @@ def get_model(model_name='vgg16', num_classes=2, pretrained=True):
 
     if model_name == 'custom_cnn':
         model = CustomCNN(num_classes=num_classes)
-        target_layer = model.features[12] # Final Conv layer
+        target_layer = model.features[4] # Final Residual Block (layer4)
     elif model_name in ['vgg16', 'vgg19']:
         model = VGGModel(model_name=model_name, num_classes=num_classes, pretrained=pretrained)
         target_layer = model.features[-2] # Final Conv layer before pool

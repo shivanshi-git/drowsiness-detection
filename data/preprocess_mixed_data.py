@@ -19,15 +19,21 @@ class MixedDataPreprocessor:
         self.target_size = target_size
         self.sample_every_n_frames = sample_every_n_frames
         
-        # Initialize MediaPipe Face Mesh
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            static_image_mode=False,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
+        # Initialize MediaPipe Face Mesh if available, or fallback to OpenCV
+        self.face_mesh = None
+        if hasattr(mp, 'solutions') and hasattr(mp.solutions, 'face_mesh'):
+            try:
+                self.face_mesh = mp.solutions.face_mesh.FaceMesh(
+                    static_image_mode=False,
+                    max_num_faces=1,
+                    refine_landmarks=True,
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5
+                )
+            except Exception:
+                self.face_mesh = None
+
+        self.cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
         # Facial Landmark Indices for Left and Right Eyes
         self.LEFT_EYE_INDICES = [33, 133, 160, 159, 158, 144, 145, 153]
@@ -39,13 +45,40 @@ class MixedDataPreprocessor:
         If no face is detected (or image is already a pre-cropped eye like MRL), returns the original image resized.
         """
         h, w, _ = frame_bgr.shape
-        rgb_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(rgb_frame)
+        
+        if self.face_mesh is not None:
+            try:
+                rgb_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                results = self.face_mesh.process(rgb_frame)
 
-        if not results.multi_face_landmarks:
-            # Fallback: Assume image is already pre-cropped eye/face
-            resized = cv2.resize(frame_bgr, self.target_size)
-            return [resized]
+                if results and results.multi_face_landmarks:
+                    crops = []
+                    landmarks = results.multi_face_landmarks[0].landmark
+
+                    for eye_indices in [self.LEFT_EYE_INDICES, self.RIGHT_EYE_INDICES]:
+                        pts = np.array([(int(landmarks[idx].x * w), int(landmarks[idx].y * h)) for idx in eye_indices])
+                        x, y, eye_w, eye_h = cv2.boundingRect(pts)
+                        
+                        pad_x = int(eye_w * 0.4)
+                        pad_y = int(eye_h * 0.4)
+                        x1 = max(0, x - pad_x)
+                        y1 = max(0, y - pad_y)
+                        x2 = min(w, x + eye_w + pad_x)
+                        y2 = min(h, y + eye_h + pad_y)
+
+                        eye_crop = frame_bgr[y1:y2, x1:x2]
+                        if eye_crop.size > 0:
+                            resized_crop = cv2.resize(eye_crop, self.target_size)
+                            crops.append(resized_crop)
+
+                    if crops:
+                        return crops
+            except Exception:
+                pass
+
+        # Fallback: Image is already pre-cropped eye/face or fallback to resize
+        resized = cv2.resize(frame_bgr, self.target_size)
+        return [resized]
 
         crops = []
         landmarks = results.multi_face_landmarks[0].landmark
@@ -120,16 +153,16 @@ class MixedDataPreprocessor:
 
         return saved_count
 
-    def build_unified_dataset(self, raw_data_dir, output_dir="processed_dataset", val_split=0.2):
+    def build_unified_dataset(self, raw_data_dirs, output_dir="processed_dataset", val_split=0.2, max_samples_per_class=3000):
         """
-        Scans raw_data_dir structured as:
-          raw_data_dir/
-            ├── alert/ (or open_eyes, normal)
-            └── drowsy/ (or closed_eyes, yawn)
-        or any nested subfolders containing images/videos.
+        Scans raw_data_dirs (list of folders or single folder) structured with subfolders.
+        Extracts crops and organizes them into 'processed_dataset/train' and 'processed_dataset/val'.
         """
+        if isinstance(raw_data_dirs, str):
+            raw_data_dirs = [raw_data_dirs]
+
         print(f"[*] Initializing Unified Data Preprocessor...")
-        print(f"[*] Raw Source Directory: {raw_data_dir}")
+        print(f"[*] Source Directories: {raw_data_dirs}")
         print(f"[*] Destination Directory: {output_dir}")
 
         train_dir = os.path.join(output_dir, "train")
@@ -139,37 +172,58 @@ class MixedDataPreprocessor:
             for label in ["0_alert", "1_drowsy"]:
                 os.makedirs(os.path.join(split, label), exist_ok=True)
 
-        raw_path = Path(raw_data_dir)
-        files_found = list(raw_path.rglob("*"))
-        
-        media_files = [f for f in files_found if f.suffix.lower() in self.IMAGE_EXTS or f.suffix.lower() in self.VIDEO_EXTS]
-        print(f"[*] Discovered total media files (Images & Videos): {len(media_files)}")
+        alert_files = []
+        drowsy_files = []
 
-        np.random.seed(42)
-        np.random.shuffle(media_files)
+        for raw_dir in raw_data_dirs:
+            if not os.path.exists(raw_dir):
+                print(f"[!] Warning: Directory '{raw_dir}' does not exist. Skipping.")
+                continue
 
-        split_idx = int(len(media_files) * (1 - val_split))
-        train_files = media_files[:split_idx]
-        val_files = media_files[split_idx:]
+            raw_path = Path(raw_dir)
+            files_found = list(raw_path.rglob("*"))
+            media_files = [f for f in files_found if f.suffix.lower() in self.IMAGE_EXTS or f.suffix.lower() in self.VIDEO_EXTS]
 
-        for split_name, file_list in [("train", train_files), ("val", val_files)]:
-            dest_base = train_dir if split_name == "train" else val_dir
-            print(f"[*] Processing {split_name} split ({len(file_list)} files)...")
-
-            for filepath in tqdm(file_list):
-                ext = filepath.suffix.lower()
+            for filepath in media_files:
                 path_str_lower = str(filepath).lower()
 
-                # Infer label from path keywords
-                if any(k in path_str_lower for k in ['closed', 'drowsy', 'yawn', 'sleep', 'micro_sleep', 'heavy']):
-                    label_str = "1_drowsy"
-                else:
-                    label_str = "0_alert"
+                # Infer label robustly
+                if any(k in path_str_lower for k in ['no_yawn', 'open', 'awake', 'notdrowsy', 'active', 'normal', 'alert']):
+                    alert_files.append(filepath)
+                elif any(k in path_str_lower for k in ['closed', 'drowsy', 'sleepy', 'fatigue', 'yawn', 'sleep', 'micro_sleep', 'heavy']):
+                    drowsy_files.append(filepath)
+
+        print(f"[*] Discovered Total Alert Files: {len(alert_files)}")
+        print(f"[*] Discovered Total Drowsy Files: {len(drowsy_files)}")
+
+        np.random.seed(42)
+        np.random.shuffle(alert_files)
+        np.random.shuffle(drowsy_files)
+
+        if max_samples_per_class and max_samples_per_class > 0:
+            alert_files = alert_files[:max_samples_per_class]
+            drowsy_files = drowsy_files[:max_samples_per_class]
+            print(f"[*] Subsampling to balanced {len(alert_files)} Alert and {len(drowsy_files)} Drowsy samples for efficient model training.")
+
+        all_media = [(f, "0_alert") for f in alert_files] + [(f, "1_drowsy") for f in drowsy_files]
+        np.random.shuffle(all_media)
+
+        split_idx = int(len(all_media) * (1 - val_split))
+        train_items = all_media[:split_idx]
+        val_items = all_media[split_idx:]
+
+        for split_name, item_list in [("train", train_items), ("val", val_items)]:
+            dest_base = train_dir if split_name == "train" else val_dir
+            print(f"[*] Processing {split_name} split ({len(item_list)} files)...")
+
+            for filepath, label_str in tqdm(item_list):
+                ext = filepath.suffix.lower()
+                prefix = filepath.parent.name
 
                 if ext in self.VIDEO_EXTS:
-                    self.process_video_file(str(filepath), dest_base, prefix="vid", label_str=label_str)
+                    self.process_video_file(str(filepath), dest_base, prefix=prefix, label_str=label_str)
                 elif ext in self.IMAGE_EXTS:
-                    self.process_image_file(str(filepath), dest_base, prefix="img", label_str=label_str)
+                    self.process_image_file(str(filepath), dest_base, prefix=prefix, label_str=label_str)
 
         print("[✓] Preprocessing Complete! Dataset saved under:", output_dir)
 
@@ -177,12 +231,11 @@ class MixedDataPreprocessor:
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Process mixed images & videos into unified crop dataset.")
-    parser.add_argument("--raw_dir", type=str, default="raw_data", help="Directory containing raw images & videos")
+    parser.add_argument("--raw_dirs", nargs="+", default=["archive", "archive(1)", "archive(2)", "archive(3)"], help="Directories containing raw datasets")
     parser.add_argument("--out_dir", type=str, default="processed_dataset", help="Output directory")
+    parser.add_argument("--max_samples", type=int, default=3000, help="Max samples per class for training speed")
     args = parser.parse_args()
 
     preprocessor = MixedDataPreprocessor(target_size=(128, 128), sample_every_n_frames=10)
-    if os.path.exists(args.raw_dir):
-        preprocessor.build_unified_dataset(args.raw_dir, args.out_dir)
-    else:
-        print(f"[!] Path {args.raw_dir} does not exist. Place your downloaded datasets under '{args.raw_dir}'.")
+    preprocessor.build_unified_dataset(args.raw_dirs, args.out_dir, max_samples_per_class=args.max_samples)
+

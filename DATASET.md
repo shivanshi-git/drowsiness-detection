@@ -49,16 +49,14 @@ This `processed_dataset` is mapped to an **80/20** Training and Validation split
 processed_dataset/
 ├── train/
 │   ├── 0_alert/
-│   │   ├── archive_face1_crop0.jpg
-│   │   └── ... (2,401 more)
+│   │   └── ... (69,078 images)
 │   └── 1_drowsy/
-│       ├── archive1_eye_crop1.jpg
-│       └── ... (2,396 more)
+│       └── ... (69,078 images)
 └── val/
     ├── 0_alert/
-    │   └── ... (598 images)
+    │   └── ... (17,277 images)
     └── 1_drowsy/
-        └── ... (602 images)
+        └── ... (17,277 images)
 ```
 
 > [!TIP]

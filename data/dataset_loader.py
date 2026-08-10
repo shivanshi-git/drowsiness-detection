@@ -46,20 +46,10 @@ def create_dataloaders(dataset_dir="processed_dataset", batch_size=32, num_worke
     train_dataset = datasets.ImageFolder(root=train_dir, transform=train_transform)
     val_dataset = datasets.ImageFolder(root=val_dir, transform=val_transform)
 
-    import numpy as np
-    from torch.utils.data import WeightedRandomSampler
-
-    # Calculate class weights to handle imbalanced datasets (e.g. 120k vs 86k)
-    targets = train_dataset.targets
-    class_counts = np.bincount(targets)
-    class_weights = 1. / class_counts
-    sample_weights = [class_weights[t] for t in targets]
-    sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
-
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        sampler=sampler,
+        shuffle=True,
         num_workers=num_workers,
         pin_memory=True
     )

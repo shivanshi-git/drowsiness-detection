@@ -32,17 +32,17 @@ Training deep neural networks on 174,000+ unstandardized, imbalanced, high-resol
 
 ## 3. The Final `processed_dataset`
 
-After preprocessing, the raw 6.5 GB dataset is distilled down to a hyper-efficient **1.1 GB** folder containing exactly **174,326 standardized 128x128 images**. 
+After preprocessing and physical balancing, the raw 6.5 GB dataset is distilled down to a hyper-efficient **1.1 GB** folder containing exactly **172,710 standardized 128x128 images**. 
 
-This `processed_dataset` is mapped to an **80/20** Training and Validation split. Because we are using the entire dataset, PyTorch's `WeightedRandomSampler` is utilized during training to ensure the slight class differences do not bias the model.
+This `processed_dataset` is mapped to an **80/20** Training and Validation split. The dataset is now **perfectly physically balanced** across both classes to eliminate any AI bias.
 
 ### Training Split (80%)
 - **`0_alert`**: 69,078 images
-- **`1_drowsy`**: 70,310 images
+- **`1_drowsy`**: 69,078 images
 
 ### Validation Split (20%)
 - **`0_alert`**: 17,277 images
-- **`1_drowsy`**: 17,661 images
+- **`1_drowsy`**: 17,277 images
 
 ### Final Structure Example:
 ```text

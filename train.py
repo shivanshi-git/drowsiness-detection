@@ -1,0 +1,123 @@
+import os
+import time
+import argparse
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from tqdm import tqdm
+
+from models.model_factory import get_model, count_parameters
+from data.dataset_loader import create_dataloaders
+from utils.metrics import evaluate_model_performance
+from xai.grad_cam import GradCAM
+from xai.visualizer import overlay_heatmap, plot_xai_comparison
+
+def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, batch_size=32, lr=1e-4, device='cuda'):
+    """
+    Main training and validation loop for Driver Drowsiness Detection.
+    """
+    device = torch.device('cuda' if torch.cuda.is_available() and device == 'cuda' else 'cpu')
+    print(f"[*] Training Model: '{model_name}' on Device: {device}")
+
+    # Create DataLoaders
+    train_loader, val_loader, class_names = create_dataloaders(dataset_dir=dataset_dir, batch_size=batch_size)
+
+    # Instantiate Model & Target Layer for Grad-CAM
+    model, target_layer = get_model(model_name=model_name, num_classes=len(class_names), pretrained=True)
+    model = model.to(device)
+
+    print(f"[*] Trainable Parameters: {count_parameters(model):.2f} Million")
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+    best_val_f1 = 0.0
+    checkpoint_dir = os.path.join("checkpoints", model_name)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    for epoch in range(1, epochs + 1):
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{epochs}")
+        for inputs, targets in pbar:
+            inputs, targets = inputs.to(device), targets.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item() * inputs.size(0)
+            preds = torch.argmax(outputs, dim=1)
+            correct += (preds == targets).sum().item()
+            total += targets.size(0)
+
+            pbar.set_postfix({'loss': f"{loss.item():.4f}", 'acc': f"{correct/total:.4f}"})
+
+        scheduler.step()
+        train_loss = running_loss / total
+        train_acc = correct / total
+
+        # Evaluate on validation set
+        val_metrics = evaluate_model_performance(model, val_loader, device=device)
+        print(f"[Epoch {epoch:02d}] Train Loss: {train_loss:.4f} | Train Acc: {train_acc*100:.2f}% | "
+              f"Val Acc: {val_metrics['accuracy']*100:.2f}% | Val F1: {val_metrics['f1_score']:.4f} | FPS: {val_metrics['fps']:.1f}")
+
+        # Save Best Model Checkpoint
+        if val_metrics['f1_score'] >= best_val_f1:
+            best_val_f1 = val_metrics['f1_score']
+            checkpoint_path = os.path.join(checkpoint_dir, "best_model.pth")
+            torch.save({
+                'epoch': epoch,
+                'model_name': model_name,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'val_f1': best_val_f1,
+                'class_names': class_names
+            }, checkpoint_path)
+            print(f"  [✓] Saved Best Model Checkpoint to: {checkpoint_path}")
+
+    # Generate XAI Verification Sample
+    print("\n[*] Generating XAI Grad-CAM Verification Sample...")
+    grad_cam = GradCAM(model, target_layer)
+    sample_inputs, sample_targets = next(iter(val_loader))
+    sample_img_tensor = sample_inputs[0:1].to(device)
+    
+    heatmap, pred_class_idx, confidence = grad_cam.generate_heatmap(sample_img_tensor)
+    
+    # Save diagnostic visualization
+    orig_np = sample_inputs[0].permute(1, 2, 0).numpy()
+    orig_np = (orig_np * np.array([0.229, 0.224, 0.225])) + np.array([0.485, 0.456, 0.406])
+    orig_np = np.clip(orig_np, 0, 1)
+    orig_bgr = (orig_np[:, :, ::-1] * 255).astype(np.uint8)
+
+    blended_bgr, _ = overlay_heatmap(orig_bgr, heatmap)
+    blended_rgb = blended_bgr[:, :, ::-1]
+    orig_rgb = (orig_np * 255).astype(np.uint8)
+
+    xai_sample_path = os.path.join(checkpoint_dir, "xai_verification_sample.png")
+    plot_xai_comparison(orig_rgb, heatmap, blended_rgb, class_names[pred_class_idx], confidence, model_name=model_name, save_path=xai_sample_path)
+    grad_cam.remove_hooks()
+
+    print(f"[✓] XAI Verification Sample Saved to: {xai_sample_path}")
+    print("[✓] Training Complete!")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train Drowsiness Detection Deep Learning Models with XAI.")
+    parser.add_argument("--model", type=str, default="vgg16", choices=['custom_cnn', 'vgg16', 'vgg19', 'resnet18', 'resnet50', 'mobilenet_v2', 'mobilenet_v3', 'efficientnet_b0', 'vit_tiny'])
+    parser.add_argument("--dataset_dir", type=str, default="processed_dataset")
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--device", type=str, default="cuda")
+
+    args = parser.parse_args()
+    if os.path.exists(args.dataset_dir):
+        train_model(model_name=args.model, dataset_dir=args.dataset_dir, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, device=args.device)
+    else:
+        print(f"[!] Dataset directory '{args.dataset_dir}' not found. Please run 'python data/preprocess_mixed_data.py --raw_dir <your_raw_folder>' first.")

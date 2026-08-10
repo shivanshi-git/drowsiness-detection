@@ -5,17 +5,28 @@ import mediapipe as mp
 class FaceMeshAnalyzer:
     """
     Computes Eye Aspect Ratio (EAR), Mouth Aspect Ratio (MAR), and Head Pose metrics
-    from real-time video frames or static images using MediaPipe.
+    from real-time video frames or static images using MediaPipe (or OpenCV Haar Cascades as fallback).
     """
     def __init__(self):
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            static_image_mode=False,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
-        )
+        solutions = getattr(mp, 'solutions', None)
+        if solutions is not None and hasattr(solutions, 'face_mesh'):
+            self.mp_face_mesh = solutions.face_mesh
+            try:
+                self.face_mesh = self.mp_face_mesh.FaceMesh(
+                    static_image_mode=False,
+                    max_num_faces=1,
+                    refine_landmarks=True,
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5
+                )
+            except Exception:
+                self.face_mesh = None
+        else:
+            self.face_mesh = None
+
+        # Fallback OpenCV cascades
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
 
         # 6 Facial Landmark points per eye for EAR formula
         self.LEFT_EYE = [33, 160, 158, 133, 153, 144]
@@ -62,6 +73,9 @@ class FaceMeshAnalyzer:
         - annotated_frame (BGR image with face mesh overlays)
         """
         h, w, _ = frame_bgr.shape
+        if self.face_mesh is None:
+            return self._process_opencv_fallback(frame_bgr)
+
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         results = self.face_mesh.process(rgb)
 
@@ -89,3 +103,27 @@ class FaceMeshAnalyzer:
             cv2.circle(annotated, (int(pt[0]), int(pt[1])), 2, (0, 255, 0), -1)
 
         return avg_ear, mar, is_eye_closed, is_yawning, annotated
+
+    def _process_opencv_fallback(self, frame_bgr):
+        annotated = frame_bgr.copy()
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        if len(faces) == 0:
+            return 0.30, 0.10, False, False, annotated
+
+        (fx, fy, fw, fh) = faces[0]
+        cv2.rectangle(annotated, (fx, fy), (fx + fw, fy + fh), (255, 0, 0), 2)
+        roi_gray = gray[fy:fy + fh, fx:fx + fw]
+        eyes = self.eye_cascade.detectMultiScale(roi_gray)
+
+        avg_ear = 0.30
+        is_eye_closed = False
+        if len(eyes) > 0:
+            for (ex, ey, ew, eh) in eyes[:2]:
+                cv2.rectangle(annotated, (fx + ex, fy + ey), (fx + ex + ew, fy + ey + eh), (0, 255, 0), 2)
+                aspect_ratio = float(eh) / float(ew) if ew > 0 else 0.5
+                if aspect_ratio < 0.35:
+                    is_eye_closed = True
+                    avg_ear = 0.18
+
+        return avg_ear, 0.10, is_eye_closed, False, annotated

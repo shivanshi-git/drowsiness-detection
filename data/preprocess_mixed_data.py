@@ -21,9 +21,10 @@ class MixedDataPreprocessor:
         
         # Initialize MediaPipe Face Mesh if available, or fallback to OpenCV
         self.face_mesh = None
-        if hasattr(mp, 'solutions') and hasattr(mp.solutions, 'face_mesh'):
+        solutions = getattr(mp, 'solutions', None)
+        if solutions is not None and hasattr(solutions, 'face_mesh'):
             try:
-                self.face_mesh = mp.solutions.face_mesh.FaceMesh(
+                self.face_mesh = solutions.face_mesh.FaceMesh(
                     static_image_mode=False,
                     max_num_faces=1,
                     refine_landmarks=True,

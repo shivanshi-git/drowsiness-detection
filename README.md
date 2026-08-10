@@ -4,80 +4,94 @@ A comprehensive Deep Learning framework for real-time **Driver Drowsiness Detect
 
 ---
 
-## 🌟 Key Features
-
-1. **Mixed Data Preprocessor (`data/preprocess_mixed_data.py`)**:
-   - Handles mixed datasets of **Images (`.jpg`, `.png`)** and **Videos (`.mp4`, `.avi`, `.mov`)**.
-   - Uses MediaPipe Face Mesh to extract eye and mouth ROIs, normalizing crops to $128 \times 128$.
-   - Fuses MRL Eye Dataset, Kaggle Drowsiness, NTHU-DDD, and UTA-RLDD into a unified balanced dataset.
-
-2. **Modular Model Suite (`models/model_factory.py`)**:
-   - Includes **VGG16/19**, **ResNet18/50**, **MobileNetV2/V3**, **EfficientNet-B0/B2**, **Custom CNN**, and **ViT-Tiny**.
-
-3. **Explainable AI Engine (`xai/grad_cam.py`)**:
-   - Computes gradient activation heatmaps to visually explain *why* the model predicted a driver as drowsy (highlighting eye closure, eyelids, or yawning).
-
-4. **Hybrid Geometric Metric (`utils/face_mesh.py`)**:
-   - Real-time **Eye Aspect Ratio (EAR)** and **Mouth Aspect Ratio (MAR)** tracking.
-
-5. **Interactive Web Dashboard (`app.py`)**:
-   - Streamlit interface for image diagnostic upload, live camera stream monitoring, and model benchmark comparisons.
+## 🛠️ Libraries and Frameworks Used
+- **PyTorch & Torchvision**: Core deep learning framework used for model building, training, and evaluation.
+- **OpenCV**: Used for real-time video and image processing, face detection, and ROI extraction.
+- **MediaPipe**: Used for high-fidelity facial landmark detection to extract eye and mouth regions.
+- **Scikit-Learn**: Utilized for evaluation metrics (precision, recall, F1-score, ROC-AUC) and confusion matrix generation.
+- **Matplotlib & Seaborn**: Used for plotting training curves, heatmaps, and matrices.
+- **Streamlit**: Used to build the interactive web dashboard.
+- **NumPy & Pandas**: Essential for numerical operations and data structuring.
 
 ---
 
-## ⚡ Quickstart Guide
+## 📂 Project Structure & File Descriptions
+
+| File / Directory | Purpose |
+| :--- | :--- |
+| `app.py` | Streamlit interactive web dashboard for real-time predictions and model comparison. |
+| `train.py` | Core training script to train and fine-tune individual models (saves evaluation metrics, graphs, and models). |
+| `train_all_models.py` | Script to sequentially train all candidate models and generate a comparative leaderboard. |
+| `predict.py` | Inference script to predict drowsiness on a single image and generate Grad-CAM heatmaps. |
+| `data/preprocess_mixed_data.py` | Unified dataset preprocessor. Merges images/videos from multiple archives into a balanced structure. |
+| `data/dataset_loader.py` | PyTorch `Dataset` and `DataLoader` setup with data augmentation (Albumentations/Torchvision). |
+| `models/model_factory.py` | Contains the definitions and factory functions for all candidate architectures. |
+| `models/custom_cnn.py` | Defines the specific lightweight Custom CNN architecture designed for fast inference. |
+| `utils/metrics.py` | Helper functions for calculating evaluation matrices, ROC curves, and logging training results. |
+| `utils/face_mesh.py` | Hybrid geometric metrics implementation (e.g., EAR, MAR calculation using MediaPipe). |
+| `xai/grad_cam.py` | Explainable AI engine using Gradient-weighted Class Activation Mapping to visualize model attention. |
+
+---
+
+## 🔄 Code Flow Diagram
+
+```mermaid
+graph TD
+    A[Raw Data Archives] -->|preprocess_mixed_data.py| B(Processed Dataset)
+    B -->|dataset_loader.py| C{DataLoader}
+    C -->|train.py| D[Model Training & Fine-Tuning]
+    D -->|model_factory.py| E((Candidate Models))
+    D --> F[Saved Models .pth]
+    D --> G[Evaluation Results]
+    G --> H(Metrics, Graphs, Heatmaps)
+    F --> I[predict.py / app.py]
+    I -->|xai/grad_cam.py| J[Grad-CAM Visualizations]
+```
+
+---
+
+## 📊 Evaluation Matrix
+
+*The table below will be updated as models complete their 25-epoch fine-tuning.*
+
+| Model Architecture | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Latency (ms) | FPS |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Custom CNN** | *Training...* | - | - | - | - | - | - |
+| **MobileNetV2** | *Pending...* | - | - | - | - | - | - |
+| **ResNet50** | *Pending...* | - | - | - | - | - | - |
+
+*(All evaluation graphs, confusion matrices, and ROC curves are automatically saved in the `results/` directory after each training run).*
+
+---
+
+## ⚡ Terminal Commands to Start the Project
 
 ### 1. Install Dependencies
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 2. Prepare Your Custom Dataset (Ignored by Git)
-Place raw images/videos in `raw_data/` and preprocess them, or directly structure your processed dataset in `processed_dataset/`:
-```text
-processed_dataset/
-├── train/
-│   ├── alert/
-│   └── drowsy/
-└── val/
-    ├── alert/
-    └── drowsy/
-```
-*(Note: `raw_data/` and `processed_dataset/` are listed in `.gitignore` to ensure dataset files remain local and are NOT pushed to GitHub).*
-
-To preprocess mixed images/videos from `raw_data/`:
+### 2. Prepare Dataset
+Place raw data in `archive/`, `archive(1)/`, etc., and run the preprocessor:
 ```bash
-python data/preprocess_mixed_data.py --raw_dir raw_data --out_dir processed_dataset
+python data/preprocess_mixed_data.py
 ```
 
-### 3. Train Model & Generate Evaluation Matrix
-Train any model (e.g. `vgg16`, `mobilenet_v2`, `resnet18`, `custom_cnn`):
+### 3. Fine-Tune a Model (e.g., Custom CNN for 25 Epochs)
 ```bash
-python train.py --model vgg16 --dataset_dir processed_dataset --epochs 10 --batch_size 32
+python train.py --model custom_cnn --dataset_dir processed_dataset --epochs 25 --batch_size 32
 ```
-This automatically:
-- Saves the best trained PyTorch model checkpoint to `saved_models/vgg16_drowsiness_model.pth`.
-- Computes and exports the complete **Evaluation Matrix** to `results/`:
-  - `confusion_matrix.png` (Confusion Matrix Heatmap)
-  - `roc_curve.png` (ROC Curve & AUC Score)
-  - `training_curves.png` (Loss & Accuracy Epoch History)
-  - `evaluation_summary.json` & `evaluation_report.txt` (Detailed Precision, Recall, F1, Accuracy, Latency & FPS)
-  - `xai_verification_sample.png` (Grad-CAM Heatmap verification sample)
+*Make sure to check the accuracy before proceeding to the next model!*
 
-### 4. Commit and Push Trained Model & Evaluation Matrix to Repository
+### 4. Single Image Prediction & XAI
 ```bash
-git add saved_models/ results/ train.py utils/metrics.py .gitignore README.md
-git commit -m "Add trained drowsiness model, evaluation matrix, and pipeline updates"
-git push origin main
+python predict.py --image path/to/image.jpg --model custom_cnn --out output_xai.jpg
 ```
 
-### 5. Single Image Prediction & Grad-CAM Heatmap
-```bash
-python predict.py --image test_driver.jpg --model vgg16 --out output_xai.jpg
-```
-
-### 6. Launch Streamlit Interactive Web Dashboard
+### 5. Launch Interactive Dashboard
 ```bash
 streamlit run app.py
 ```
----

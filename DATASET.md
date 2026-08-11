@@ -92,3 +92,14 @@ To achieve >90% validation accuracy on unseen human driver subjects without over
 ### Key Takeaways:
 - **ResNet-18** provides the optimal parameter capacity (~11.18M) to capture fine eyelid state, iris position, and pupil dilation on 128x128 crops without memorizing driver-specific features (skin tone, lighting background).
 - **Inference Efficiency**: Runs at double the frame rate (>140 FPS), making it ideal for real-world webcam deployment (`app.py`).
+
+---
+
+## 5. Model Checkpoint Management Strategy
+
+During training, two distinct `.pth` checkpoint files are maintained under `saved_models/` for each model architecture:
+
+| Checkpoint Filename | Update Frequency | Primary Purpose |
+| :--- | :--- | :--- |
+| **`<model_name>_drowsiness_model.pth`** | End of **Every Epoch** | Saves current epoch, optimizer state, and loss history so training can be **paused and resumed seamlessly**. |
+| **`<model_name>_best_model.pth`** | Only on **New Highest Record Val F1-Score** | Guarantees that the **highest-performing model weights** on unseen validation drivers are preserved for real-time deployment (`app.py` & `predict.py`). |

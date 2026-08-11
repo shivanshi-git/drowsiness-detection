@@ -107,10 +107,12 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
     plt.savefig(roc_path, dpi=300)
     plt.close()
 
-    # 3. Plot Training Curves if history available
-    if history:
+    # 3. Plot Training Curves & Export Per-Epoch CSV if history available
+    epoch_details = []
+    if history and 'train_loss' in history and len(history['train_loss']) > 0:
+        import pandas as pd
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-        epochs = range(1, len(history['train_loss']) + 1)
+        epochs = list(range(1, len(history['train_loss']) + 1))
 
         ax1.plot(epochs, history['train_loss'], 'b-o', label='Train Loss')
         ax1.plot(epochs, history['val_loss'], 'r-s', label='Val Loss')
@@ -120,11 +122,11 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
         ax1.legend()
         ax1.grid(True, alpha=0.3)
 
-        ax2.plot(epochs, history['train_acc'], 'b-o', label='Train Accuracy')
-        ax2.plot(epochs, history['val_acc'], 'r-s', label='Val Accuracy')
-        ax2.set_title('Accuracy Curves')
+        ax2.plot(epochs, [a * 100 for a in history['train_acc']], 'b-o', label='Train Accuracy (%)')
+        ax2.plot(epochs, [a * 100 for a in history['val_acc']], 'r-s', label='Val Accuracy (%)')
+        ax2.set_title('Accuracy Curves (%)')
         ax2.set_xlabel('Epochs')
-        ax2.set_ylabel('Accuracy')
+        ax2.set_ylabel('Accuracy (%)')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
 
@@ -132,6 +134,21 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
         curves_path = os.path.join(output_dir, 'training_curves.png')
         plt.savefig(curves_path, dpi=300)
         plt.close()
+
+        # Build epoch details list
+        for ep_idx in range(len(history['train_loss'])):
+            epoch_details.append({
+                'epoch': ep_idx + 1,
+                'train_loss': round(float(history['train_loss'][ep_idx]), 4),
+                'train_acc_pct': round(float(history['train_acc'][ep_idx]) * 100, 2),
+                'val_loss': round(float(history['val_loss'][ep_idx]), 4),
+                'val_acc_pct': round(float(history['val_acc'][ep_idx]) * 100, 2)
+            })
+
+        # Save CSV Spreadsheet of per-epoch details
+        csv_path = os.path.join(output_dir, 'epoch_training_history.csv')
+        df_history = pd.DataFrame(epoch_details)
+        df_history.to_csv(csv_path, index=False)
 
     # 4. Generate Classification Report & JSON Summary
     clf_report_str = classification_report(metrics['all_targets'], metrics['all_preds'], target_names=class_names)
@@ -145,7 +162,8 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
         'fps': float(metrics['fps']),
         'latency_ms': float(metrics['latency_ms']),
         'confusion_matrix': cm.tolist(),
-        'class_names': class_names
+        'class_names': class_names,
+        'epoch_history': epoch_details
     }
 
     json_path = os.path.join(output_dir, 'evaluation_summary.json')
@@ -164,6 +182,13 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
         f.write(f"ROC-AUC:           {metrics['roc_auc']:.4f}\n")
         f.write(f"Inference Latency: {metrics['latency_ms']:.2f} ms/sample\n")
         f.write(f"FPS Throughput:    {metrics['fps']:.1f} FPS\n\n")
+        if epoch_details:
+            f.write("Epoch-by-Epoch Training Details:\n")
+            f.write("Epoch | Train Loss | Train Acc (%) | Val Loss | Val Acc (%)\n")
+            f.write("-----------------------------------------------------------\n")
+            for ep in epoch_details:
+                f.write(f" {ep['epoch']:02d}   |   {ep['train_loss']:.4f}   |    {ep['train_acc_pct']:6.2f}%   |  {ep['val_loss']:.4f}  |   {ep['val_acc_pct']:6.2f}%\n")
+            f.write("\n")
         f.write("Classification Report:\n")
         f.write(clf_report_str)
 
@@ -172,6 +197,7 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
     print(f"    - {roc_path}")
     if history:
         print(f"    - {os.path.join(output_dir, 'training_curves.png')}")
+        print(f"    - {os.path.join(output_dir, 'epoch_training_history.csv')}")
     print(f"    - {json_path}")
     print(f"    - {txt_path}\n")
 

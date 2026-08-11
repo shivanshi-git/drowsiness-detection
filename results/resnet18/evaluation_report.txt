@@ -1,0 +1,21 @@
+==================================================
+         MODEL EVALUATION MATRIX REPORT           
+==================================================
+
+Overall Accuracy:  61.56%
+Precision:         0.5889
+Recall:            0.7372
+F1-Score:          0.6548
+ROC-AUC:           0.5929
+Inference Latency: 0.18 ms/sample
+FPS Throughput:    5533.5 FPS
+
+Classification Report:
+              precision    recall  f1-score   support
+
+     0_alert       0.66      0.50      0.57     17572
+    1_drowsy       0.59      0.74      0.65     17188
+
+    accuracy                           0.62     34760
+   macro avg       0.62      0.62      0.61     34760
+weighted avg       0.62      0.62      0.61     34760

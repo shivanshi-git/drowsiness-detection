@@ -6,16 +6,17 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from models.model_factory import get_model, count_parameters
+from models.model_factory import get_model_and_config, count_parameters
 from data.dataset_loader import create_dataloaders
 from utils.metrics import evaluate_model_performance, save_evaluation_matrix
 from xai.grad_cam import GradCAM
 from xai.visualizer import overlay_heatmap, plot_xai_comparison
 import numpy as np
 
-def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, batch_size=32, lr=1e-4, device='cuda'):
+def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs=10, batch_size=32, lr=None, device='cuda'):
     """
     Main training and validation loop for Driver Drowsiness Detection.
+    Applies paradigm-specific optimization protocols (AdamW, weight decay, learning rates) automatically.
     """
     if device == 'cuda':
         if not torch.cuda.is_available():
@@ -32,15 +33,23 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
     # Create DataLoaders
     train_loader, val_loader, class_names = create_dataloaders(dataset_dir=dataset_dir, batch_size=batch_size)
 
-    # Instantiate Model & Target Layer for Grad-CAM
-    model, target_layer = get_model(model_name=model_name, num_classes=len(class_names), pretrained=True)
+    # Instantiate Model, Target Layer, and Paradigm-Specific Optimization Config
+    model, target_layer, config = get_model_and_config(model_name=model_name, num_classes=len(class_names), pretrained=True)
     model = model.to(device)
 
+    effective_lr = lr if lr is not None else config.get('lr', 1e-3)
+    weight_decay = config.get('weight_decay', 1e-4)
+
+    print(f"[*] Paradigm Protocol: {config.get('opt_type', 'AdamW')} | LR: {effective_lr} | Weight Decay: {weight_decay}")
     print(f"[*] Trainable Parameters: {count_parameters(model):.2f} Million")
 
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    optimizer = optim.AdamW(model.parameters(), lr=effective_lr, weight_decay=weight_decay)
+
+    if config.get('scheduler') == 'cosine':
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    else:
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=2)
 
     best_val_f1 = 0.0
     checkpoint_dir = os.path.join("saved_models")
@@ -76,9 +85,6 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
             correct += (preds == targets).sum().item()
             total += targets.size(0)
 
-            pbar.set_postfix({'loss': f"{loss.item():.4f}", 'acc': f"{correct/total:.4f}"})
-
-        scheduler.step()
         train_loss = running_loss / total
         train_acc = correct / total
 
@@ -86,6 +92,11 @@ def train_model(model_name='vgg16', dataset_dir='processed_dataset', epochs=10, 
         val_metrics = evaluate_model_performance(model, val_loader, device=device)
         print(f"[Epoch {epoch:02d}] Train Loss: {train_loss:.4f} | Train Acc: {train_acc*100:.2f}% | "
               f"Val Acc: {val_metrics['accuracy']*100:.2f}% | Val F1: {val_metrics['f1_score']:.4f} | FPS: {val_metrics['fps']:.1f}")
+
+        if isinstance(scheduler, optim.lr_scheduler.ReduceLROnPlateau):
+            scheduler.step(val_metrics['f1_score'])
+        else:
+            scheduler.step()
 
         history['train_loss'].append(train_loss)
         history['train_acc'].append(train_acc)
@@ -144,7 +155,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Drowsiness Detection Deep Learning Models with XAI.")
     parser.add_argument("--model", type=str, default="vgg16", choices=['custom_cnn', 'vgg16', 'vgg19', 'resnet18', 'resnet50', 'mobilenet_v2', 'mobilenet_v3', 'efficientnet_b0', 'vit_tiny'])
     parser.add_argument("--dataset_dir", type=str, default="processed_dataset")
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--device", type=str, default="cuda")

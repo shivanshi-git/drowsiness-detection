@@ -16,8 +16,8 @@ def extract_source_info(filename):
     # Try to extract video frame pattern (_f10, _f20, etc.)
     base_no_frame = re.sub(r'_f\d+$', '', base_no_crop)
     
-    # Extract subject ID patterns if present (e.g., s0001, subject01, sub_05, etc.)
-    subject_match = re.search(r'(subject[_\-]?\d+|sub[_\-]?\d+|s\d{3,4}|\d{2}_\d{2})', base, re.IGNORECASE)
+    # Extract subject ID patterns (NTHU, MRL, UTA-RLDD, Kaggle, directory subjects)
+    subject_match = re.search(r'(nthu[_\-]?\d+|mrl[_\-]?s\d{3,4}|s\d{3,4}|subject[_\-]?\d+|participant[_\-]?\d+|sub[_\-]?\d+|subj_dir_\d+|\d{2}_\d{2})', base, re.IGNORECASE)
     subject_id = subject_match.group(0).lower() if subject_match else None
     
     return {

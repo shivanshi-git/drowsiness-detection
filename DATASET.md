@@ -20,44 +20,57 @@ The raw data is stored across four main archive directories, totaling approximat
 
 ## 2. Dataset Preprocessing (`preprocess_mixed_data.py`)
 
-Training deep neural networks on 174,000+ unstandardized, imbalanced, high-resolution images is slow and inefficient. Therefore, we utilize the `preprocess_mixed_data.py` script.
+Training deep neural networks on 174,000+ unstandardized, imbalanced, high-resolution images is slow and prone to data leakage and lighting bias. Therefore, we utilize the enhanced `preprocess_mixed_data.py` script.
 
 ### Preprocessing Pipeline:
-1. **Intelligent Keyword Inference**: The script recursively scans the raw archives and infers labels by analyzing the folder and file names (e.g., `no_yawn`, `awake`, `open` -> **Alert**; `closed`, `fatigue`, `yawn` -> **Drowsy**).
-2. **Subsampling (Balancing)**: To ensure the model doesn't become biased and to speed up training, the preprocessor randomly samples a balanced subset of **3,000 Alert files** and **3,000 Drowsy files**.
-3. **MediaPipe Face Mesh Extraction**: For each sampled file, MediaPipe detects the face and specifically extracts **Eye and Mouth Regions of Interest (ROI)**.
-4. **Standardization**: All extracted crops are resized to a uniform `128x128` resolution.
+1. **Intelligent Keyword Inference**: The script recursively scans raw archives and infers labels by analyzing folder and file names (e.g., `no_yawn`, `awake`, `open` -> **Alert**; `closed`, `fatigue`, `yawn` -> **Drowsy**).
+2. **Group-Aware Subject Isolation (Leakage Prevention)**: Extracts unique Subject / Group IDs (`nthu_001`, `mrl_s0013`, `subject01`, etc.) and performs group-level stratified splitting. 100% of frames/videos from any subject stay strictly in `train` or `val` with **0.00% data leakage**.
+3. **Physical 50/50 Class Balancing**: Enforces exact 1:1 physical class balancing in training splits (`60,314 Alert` vs `60,314 Drowsy`) to eliminate class representation bias during neural network optimization.
+4. **Cascaded 3-Tier Eye Extractor**:
+   - **Tier 1 (MediaPipe Face Mesh)**: Extracts exact left & right eye ROIs with 40% bounding box padding.
+   - **Tier 2 (OpenCV Cascade Face Detection)**: Fallback for detecting upper-half eye regions if MediaPipe landmarks fail.
+   - **Tier 3 (Anatomical Upper-Third Crop)**: Fallback for video frames where face detection fails on extreme downward head nodding, eliminating full-frame scale artifacts.
+5. **CLAHE Illumination Equalization**: Applies Contrast Limited Adaptive Histogram Equalization (`clipLimit=2.0`, `tileGridSize=(8, 8)`) on L-channel (LAB space) to equalize contrast across IR night-vision and daylight RGB driving frames.
+6. **Standardization**: All extracted crops are resized to a uniform `128x128` resolution.
 
 ---
 
 ## 3. The Final `processed_dataset`
 
-After preprocessing and physical balancing, the raw 6.5 GB dataset is distilled down to a hyper-efficient **1.1 GB** folder containing exactly **172,710 standardized 128x128 images**. 
+After group-aware preprocessing and CLAHE contrast equalization, the raw 6.5 GB dataset is distilled into a hyper-efficient **1.0 GB** folder containing exactly **155,388 standardized 128x128 images**.
 
-This `processed_dataset` is mapped to an **80/20** Training and Validation split. The dataset is now **perfectly physically balanced** across both classes to eliminate any AI bias.
+This `processed_dataset` is mapped to an **80/20** Training and Validation split with **zero subject overlap** between splits.
 
-### Training Split (80%)
-- **`0_alert`**: 69,078 images
-- **`1_drowsy`**: 69,078 images
+### Training Split (80% - 120,628 images) — Strictly 50/50 Balanced
+- **`0_alert`**: 60,314 images (50.0%)
+- **`1_drowsy`**: 60,314 images (50.0%)
 
-### Validation Split (20%)
-- **`0_alert`**: 17,277 images
-- **`1_drowsy`**: 17,277 images
+### Validation Split (20% - 34,760 images)
+- **`0_alert`**: 17,572 images (50.6%)
+- **`1_drowsy`**: 17,188 images (49.4%)
+
+### Per-Dataset Contribution Breakdown
+
+The processed **155,388 image dataset** combines crops extracted across all 4 raw benchmark dataset archives:
+
+| Dataset Name | Source Directory | Generated Crops | Contribution (%) | Key Characteristics & Features |
+| :--- | :--- | :--- | :--- | :--- |
+| **MRL Eye Dataset** | `archive(1)/` | **80,194 crops** | **51.61%** | High-precision IR & RGB eye crops across 37 unique human subjects under varying lighting. |
+| **NTHU-DDD** (National Tsing Hua University) | `archive(2)/` | **59,516 crops** | **38.30%** | Simulated driving scenario video frames capturing glasses, night vision IR, nodding, and yawning. |
+| **UTA-RLDD** (Real-Life Drowsiness Dataset) | `archive(3)/` | **8,686 crops** | **5.59%** | Multi-stage drowsiness progression video frames across human participants. |
+| **Kaggle Driver Drowsiness Dataset** | `archive/` | **6,992 crops** | **4.50%** | Full-face and eye state images under varied vehicle interior lighting conditions. |
+| **TOTAL** | **All Archives** | **155,388 crops** | **100.00%** | **Unified 128x128 CLAHE crop dataset with 0.00% data leakage.** |
 
 ### Final Structure Example:
 ```text
 processed_dataset/
 ├── train/
-│   ├── 0_alert/
-│   │   └── ... (69,078 images)
-│   └── 1_drowsy/
-│       └── ... (69,078 images)
+│   ├── 0_alert/  └── ... (60,314 images - 50.0%)
+│   └── 1_drowsy/ └── ... (60,314 images - 50.0%)
 └── val/
-    ├── 0_alert/
-    │   └── ... (17,277 images)
-    └── 1_drowsy/
-        └── ... (17,277 images)
+    ├── 0_alert/  └── ... (17,572 images - 50.6%)
+    └── 1_drowsy/ └── ... (17,188 images - 49.4%)
 ```
 
 > [!TIP]
-> By standardizing the dataset to exactly 128x128 crops focusing strictly on the eyes/mouth, the models (like the Custom CNN) can train incredibly fast while maintaining high sensitivity to micro-sleeps and yawning.
+> By standardizing the dataset to exactly 128x128 CLAHE eye crops, enforcing 50/50 physical class balance, and isolating subject splits, models can train fast while guaranteeing valid, leak-free evaluation metrics on real-world driver drowsiness CUES.

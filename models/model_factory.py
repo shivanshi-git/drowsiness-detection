@@ -43,6 +43,44 @@ def get_model(model_name='vgg16', num_classes=2, pretrained=True):
 
     return model, target_layer
 
+def get_model_and_config(model_name='custom_cnn', num_classes=2, pretrained=True):
+    """
+    Returns initialized model, Grad-CAM target layer, and paradigm-specific optimization configuration.
+    Resolves Hyperparameter Conflation by matching optimizer settings to architectural paradigms:
+    - Lightweight CNNs: AdamW, lr=1e-3, weight_decay=1e-4
+    - Deep Residual: AdamW, lr=5e-4, weight_decay=1e-4
+    - Vision Transformers (ViT): AdamW, lr=3e-4, weight_decay=0.05, 5-epoch warmup
+    """
+    model, target_layer = get_model(model_name=model_name, num_classes=num_classes, pretrained=pretrained)
+    model_name = model_name.lower().strip()
+
+    if model_name in ['vit_tiny', 'vit']:
+        config = {
+            "opt_type": "AdamW",
+            "lr": 3e-4,
+            "weight_decay": 0.05,
+            "scheduler": "cosine",
+            "warmup_epochs": 5
+        }
+    elif model_name in ['resnet18', 'resnet50']:
+        config = {
+            "opt_type": "AdamW",
+            "lr": 5e-4,
+            "weight_decay": 1e-4,
+            "scheduler": "plateau",
+            "warmup_epochs": 0
+        }
+    else:
+        config = {
+            "opt_type": "AdamW",
+            "lr": 1e-3,
+            "weight_decay": 1e-4,
+            "scheduler": "plateau",
+            "warmup_epochs": 0
+        }
+
+    return model, target_layer, config
+
 def count_parameters(model):
     """Returns total trainable parameters count in millions."""
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

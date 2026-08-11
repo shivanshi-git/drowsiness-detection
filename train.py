@@ -151,29 +151,39 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
     final_val_metrics = evaluate_model_performance(model, val_loader, device=device)
     summary_dict = save_evaluation_matrix(final_val_metrics, history=history, class_names=class_names, output_dir=model_results_dir)
 
-    # Generate XAI Verification Sample
-    print(f"\n[*] Generating Grad-CAM Heatmap for '{model_name}'...")
+    # Generate 5 XAI Verification Heatmaps per model
+    print(f"\n[*] Generating 5 Grad-CAM Heatmaps for '{model_name}'...")
     try:
         grad_cam = GradCAM(model, target_layer)
-        sample_inputs, sample_targets = next(iter(val_loader))
-        sample_img_tensor = sample_inputs[0:1].to(device)
+        val_samples_gen = iter(val_loader)
+        sample_inputs, sample_targets = next(val_samples_gen)
         
-        heatmap, pred_class_idx, confidence = grad_cam.generate_heatmap(sample_img_tensor)
-        
-        # Save diagnostic visualization
-        orig_np = sample_inputs[0].permute(1, 2, 0).numpy()
-        orig_np = (orig_np * np.array([0.229, 0.224, 0.225])) + np.array([0.485, 0.456, 0.406])
-        orig_np = np.clip(orig_np, 0, 1)
-        orig_bgr = (orig_np[:, :, ::-1] * 255).astype(np.uint8)
+        num_xai_samples = min(5, sample_inputs.size(0))
+        for idx in range(num_xai_samples):
+            sample_img_tensor = sample_inputs[idx:idx+1].to(device)
+            true_label = class_names[sample_targets[idx].item()]
 
-        blended_bgr, _ = overlay_heatmap(orig_bgr, heatmap)
-        blended_rgb = blended_bgr[:, :, ::-1]
-        orig_rgb = (orig_np * 255).astype(np.uint8)
+            heatmap, pred_class_idx, confidence = grad_cam.generate_heatmap(sample_img_tensor)
+            pred_label = class_names[pred_class_idx]
 
-        xai_sample_path = os.path.join(model_results_dir, f"{model_name}_xai_heatmap.png")
-        plot_xai_comparison(orig_rgb, heatmap, blended_rgb, class_names[pred_class_idx], confidence, model_name=model_name, save_path=xai_sample_path)
+            orig_np = sample_inputs[idx].permute(1, 2, 0).numpy()
+            orig_np = (orig_np * np.array([0.229, 0.224, 0.225])) + np.array([0.485, 0.456, 0.406])
+            orig_np = np.clip(orig_np, 0, 1)
+            orig_bgr = (orig_np[:, :, ::-1] * 255).astype(np.uint8)
+
+            blended_bgr, _ = overlay_heatmap(orig_bgr, heatmap)
+            blended_rgb = blended_bgr[:, :, ::-1]
+            orig_rgb = (orig_np * 255).astype(np.uint8)
+
+            xai_sample_path = os.path.join(model_results_dir, f"xai_sample_{idx+1}.png")
+            plot_xai_comparison(
+                orig_rgb, heatmap, blended_rgb,
+                f"Pred: {pred_label.upper()} (True: {true_label})",
+                confidence, model_name=model_name, save_path=xai_sample_path
+            )
+            print(f"  [✓] XAI Grad-CAM Heatmap {idx+1}/5 Saved to: {xai_sample_path}")
+
         grad_cam.remove_hooks()
-        print(f"[✓] XAI Grad-CAM Heatmap Saved to: {xai_sample_path}")
     except Exception as e:
         print(f"[!] Warning: Grad-CAM generation skipped for {model_name}: {e}")
 

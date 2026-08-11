@@ -57,14 +57,30 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(model_results_dir, exist_ok=True)
 
-    history = {
-        'train_loss': [],
-        'train_acc': [],
-        'val_loss': [],
-        'val_acc': []
-    }
+    start_epoch = 1
+    checkpoint_path = os.path.join(checkpoint_dir, f"{model_name}_drowsiness_model.pth")
+    if os.path.exists(checkpoint_path):
+        try:
+            checkpoint = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            if 'optimizer_state_dict' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            if 'scheduler_state_dict' in checkpoint and checkpoint['scheduler_state_dict'] is not None and hasattr(scheduler, 'load_state_dict'):
+                scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            if 'history' in checkpoint and checkpoint['history'] is not None:
+                history = checkpoint['history']
+            else:
+                history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+            start_epoch = checkpoint.get('epoch', 0) + 1
+            best_val_f1 = checkpoint.get('val_f1', 0.0)
+            print(f"[✓] Resumed training from checkpoint at Epoch {start_epoch-1} (Best Val F1: {best_val_f1:.4f})")
+        except Exception as e:
+            print(f"[!] Note: Could not load checkpoint ({e}). Starting fresh training.")
+            history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+    else:
+        history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
 
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         model.train()
         running_loss = 0.0
         correct = 0
@@ -103,10 +119,23 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
         history['val_acc'].append(val_metrics['accuracy'])
         history['val_loss'].append(1.0 - val_metrics['accuracy'])
 
+        # Save Latest Checkpoint after every epoch for seamless pause/resume
+        latest_checkpoint_path = os.path.join(checkpoint_dir, f"{model_name}_drowsiness_model.pth")
+        torch.save({
+            'epoch': epoch,
+            'model_name': model_name,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict() if hasattr(scheduler, 'state_dict') else None,
+            'val_f1': val_metrics['f1_score'],
+            'history': history,
+            'class_names': class_names
+        }, latest_checkpoint_path)
+
         # Save Best Model Checkpoint
         if val_metrics['f1_score'] >= best_val_f1:
             best_val_f1 = val_metrics['f1_score']
-            checkpoint_path = os.path.join(checkpoint_dir, f"{model_name}_drowsiness_model.pth")
+            best_checkpoint_path = os.path.join(checkpoint_dir, f"{model_name}_best_model.pth")
             torch.save({
                 'epoch': epoch,
                 'model_name': model_name,
@@ -114,8 +143,8 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
                 'optimizer_state_dict': optimizer.state_dict(),
                 'val_f1': best_val_f1,
                 'class_names': class_names
-            }, checkpoint_path)
-            print(f"  [✓] Saved Best Model Checkpoint to: {checkpoint_path}")
+            }, best_checkpoint_path)
+            print(f"  [✓] Saved Best Model Checkpoint (Val F1: {best_val_f1:.4f}) to: {best_checkpoint_path}")
 
     # Final Evaluation & Evaluation Matrix Artifact Generation
     print(f"\n[*] Computing Final Evaluation Matrix and Generating Artifacts for '{model_name}'...")

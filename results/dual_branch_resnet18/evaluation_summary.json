@@ -1,0 +1,33 @@
+{
+    "accuracy": 0.5578826237054085,
+    "precision": 0.5573264457603628,
+    "recall": 0.5147195717942751,
+    "specificity": 0.6001024356931481,
+    "f1_score": 0.535176335369911,
+    "roc_auc": 0.5803417838034477,
+    "fps": 3170.352270189483,
+    "latency_ms": 0.3154223615472967,
+    "confusion_matrix": [
+        [
+            10545,
+            7027
+        ],
+        [
+            8341,
+            8847
+        ]
+    ],
+    "class_names": [
+        "0_alert",
+        "1_drowsy"
+    ],
+    "epoch_history": [
+        {
+            "epoch": 1,
+            "train_loss": 0.3795,
+            "train_acc_pct": 88.2,
+            "val_loss": 0.4421,
+            "val_acc_pct": 55.79
+        }
+    ]
+}

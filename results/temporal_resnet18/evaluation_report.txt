@@ -1,0 +1,27 @@
+==================================================
+         MODEL EVALUATION MATRIX REPORT           
+==================================================
+
+Overall Accuracy:  53.39%
+Precision:         0.5402
+Recall:            0.3854
+Specificity:       0.6791
+F1-Score:          0.4498
+ROC-AUC:           0.6188
+Inference Latency: 0.18 ms/sample
+FPS Throughput:    5407.9 FPS
+
+Epoch-by-Epoch Training Details:
+Epoch | Train Loss | Train Acc (%) | Val Loss | Val Acc (%)
+-----------------------------------------------------------
+ 01   |   0.0185   |     86.77%   |  0.4661  |    53.39%
+
+Classification Report:
+              precision    recall  f1-score   support
+
+     0_alert       0.53      0.68      0.60     17572
+    1_drowsy       0.54      0.39      0.45     17188
+
+    accuracy                           0.53     34760
+   macro avg       0.54      0.53      0.52     34760
+weighted avg       0.54      0.53      0.52     34760

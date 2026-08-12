@@ -30,6 +30,7 @@ checkpoints/
 *.pt
 *.onnx
 *.engine
+*.pth
 
 # Allow tracking saved_models and results directory artifacts for git push
 !saved_models/
@@ -41,6 +42,8 @@ checkpoints/
 raw_data/
 processed_dataset/
 processed_dataset.zip
+processed_dual_dataset/
+processed_dual_dataset.zip
 *.zip
 archive/
 archive(1)/

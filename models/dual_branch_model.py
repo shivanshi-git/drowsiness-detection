@@ -47,11 +47,15 @@ class DualBranchResNet(nn.Module):
         Accepts either separate x_eye and x_mouth tensors,
         OR a single combined x_composite tensor of shape (B, 3, 128, 256) split into left/right halves.
         """
-        if x_mouth is None and x_eye.dim() == 4 and x_eye.shape[3] == 256:
-            # Split composite (B, C, 128, 256) into left (eye) and right (mouth) halves
-            x_composite = x_eye
-            x_eye = x_composite[:, :, :, :128]
-            x_mouth = x_composite[:, :, :, 128:]
+        if x_mouth is None and x_eye.dim() == 4:
+            if x_eye.shape[3] == 256:
+                # Split composite (B, C, 128, 256) into left (eye) and right (mouth) halves
+                x_composite = x_eye
+                x_eye = x_composite[:, :, :, :128]
+                x_mouth = x_composite[:, :, :, 128:]
+            else:
+                # Fallback for single 128x128 crop: pass image to both branches
+                x_mouth = x_eye
 
         feat_eye = self.eye_branch(x_eye)     # (B, 512)
         feat_mouth = self.mouth_branch(x_mouth) # (B, 512)

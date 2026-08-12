@@ -119,9 +119,79 @@ class DualROIProcessor:
         dual_roi_composite = np.hstack([eye_crop, mouth_crop])
         return dual_roi_composite
 
-if __name__ == "__main__":
+def process_dataset_folder(src_dir="processed_dataset", out_dir="processed_dual_dataset"):
+    """
+    Scans src_dir (train/val splits with 0_alert / 1_drowsy),
+    applies Dual-ROI extraction (Eye + Mouth Yawn) to generate 256x128 composite crops,
+    and saves to out_dir preserving class splits and subject isolation.
+    """
     processor = DualROIProcessor()
-    dummy_img = np.zeros((300, 300, 3), dtype=np.uint8)
-    cv2.rectangle(dummy_img, (50, 50), (250, 250), (255, 255, 255), -1)
-    res = processor.extract_dual_roi(dummy_img)
-    print(f"[✓] DualROIProcessor test output shape: {res.shape}")
+    if not os.path.exists(src_dir):
+        print(f"[!] Source dataset directory '{src_dir}' not found.")
+        return
+
+    print(f"[*] Extracting Dual-ROI (Eye + Mouth) from '{src_dir}' to '{out_dir}'...")
+    img_exts = {'.png', '.jpg', '.jpeg', '.bmp'}
+
+    total_images_processed = 0
+    stats = {}
+
+    for split in ['train', 'val']:
+        stats[split] = {}
+        for cls_name in ['0_alert', '1_drowsy']:
+            in_folder = os.path.join(src_dir, split, cls_name)
+            out_folder = os.path.join(out_dir, split, cls_name)
+            if not os.path.exists(in_folder):
+                stats[split][cls_name] = 0
+                continue
+            os.makedirs(out_folder, exist_ok=True)
+
+            file_list = [Path(p) for p in glob.glob(os.path.join(in_folder, "*")) if Path(p).suffix.lower() in img_exts]
+            print(f"[*] Processing {split}/{cls_name} ({len(file_list)} images)...")
+
+            count = 0
+            for img_path in tqdm(file_list):
+                img_bgr = cv2.imread(str(img_path))
+                if img_bgr is None:
+                    continue
+                
+                dual_crop = processor.extract_dual_roi(img_bgr)
+                if dual_crop is not None:
+                    out_filepath = os.path.join(out_folder, img_path.name)
+                    cv2.imwrite(out_filepath, dual_crop)
+                    count += 1
+
+            stats[split][cls_name] = count
+            total_images_processed += count
+
+    # Calculate total size on disk
+    total_bytes = 0
+    for root, _, files in os.walk(out_dir):
+        for f in files:
+            fp = os.path.join(root, f)
+            if os.path.isfile(fp):
+                total_bytes += os.path.getsize(fp)
+
+    size_mb = total_bytes / (1024 * 1024)
+    size_gb = total_bytes / (1024 * 1024 * 1024)
+    size_str = f"{size_gb:.2f} GB" if size_gb >= 1.0 else f"{size_mb:.2f} MB"
+
+    print("\n==================================================")
+    print("        DUAL-ROI PREPROCESSED DATASET SUMMARY     ")
+    print("==================================================")
+    print(f"Output Directory:    {out_dir}")
+    print(f"Total Disk Size:     {size_str} ({total_bytes:,} bytes)")
+    print(f"Total Images:        {total_images_processed:,} composite 256x128 images")
+    print(f"Train Split:         {stats.get('train', {}).get('0_alert', 0):,} Alert | {stats.get('train', {}).get('1_drowsy', 0):,} Drowsy")
+    print(f"Val Split:           {stats.get('val', {}).get('0_alert', 0):,} Alert | {stats.get('val', {}).get('1_drowsy', 0):,} Drowsy")
+    print("==================================================\n")
+    print(f"[✓] Dual-ROI Preprocessing Complete! Ready for model training.")
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Extract Dual-ROI (Eye + Mouth) composite images.")
+    parser.add_argument("--src_dir", type=str, default="processed_dataset")
+    parser.add_argument("--out_dir", type=str, default="processed_dual_dataset")
+    args = parser.parse_args()
+
+    process_dataset_folder(src_dir=args.src_dir, out_dir=args.out_dir)

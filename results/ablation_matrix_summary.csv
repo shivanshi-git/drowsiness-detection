@@ -1,0 +1,7 @@
+Experiment,Model,Loss,Accuracy,Precision,Recall (Sensitivity),Specificity,F1-Score,ROC-AUC
+Baseline,resnet18,CROSS_ENTROPY,61.56%,0.5889,0.7372,0.4967,0.6548,0.5929
+Exp_A_FocalLoss,resnet18,FOCAL,61.56%,0.5889,0.7372,0.4967,0.6548,0.5929
+Exp_B_DualBranch,dual_branch_resnet18,CROSS_ENTROPY,55.79%,0.5573,0.5147,0.6001,0.5352,0.5803
+Exp_C_Phase1,resnet18,FOCAL,61.56%,0.5889,0.7372,0.4967,0.6548,0.5929
+Exp_D_Phase2,dual_branch_resnet18,FOCAL,55.79%,0.5573,0.5147,0.6001,0.5352,0.5803
+Exp_E_Phase3,temporal_resnet18,FOCAL,53.39%,0.5402,0.3854,0.6791,0.4498,0.6188

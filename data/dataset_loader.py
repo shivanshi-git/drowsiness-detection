@@ -13,11 +13,11 @@ def get_data_transforms(img_size=(128, 128)):
         transforms.Resize(img_size),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(degrees=15),
-        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
-        transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
-        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3),
+        transforms.RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.85, 1.15), shear=10),
+        transforms.RandomPerspective(distortion_scale=0.25, p=0.5),
+        transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.3, hue=0.05),
         transforms.ToTensor(),
-        transforms.RandomErasing(p=0.2, scale=(0.02, 0.1)),
+        transforms.RandomErasing(p=0.3, scale=(0.02, 0.2), value='random'),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
     ])

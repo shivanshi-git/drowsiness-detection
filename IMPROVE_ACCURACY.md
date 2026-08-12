@@ -1,13 +1,13 @@
-# 🚀 Strategic Roadmap to Achieve >90%+ Validation Accuracy
+# 🚀 Strategic Roadmap to Achieve >90%+ Subject-Independent Accuracy
 
 > **Project:** Driver Drowsiness Detection System  
-> **Document Purpose:** Engineering roadmap to eliminate static single-crop limitations, eliminate blink false positives, and boost zero-leakage validation accuracy from ~63% to >90%+.
+> **Document Purpose:** Rigorous engineering roadmap to eliminate static single-crop limitations, eliminate blink false positives, prevent data leakage, and systematically evaluate subject-independent performance.
 
 ---
 
 ## 📌 Executive Summary & Root Cause Analysis
 
-Evaluating models on a **100% Group-Isolated Dataset** (where validation drivers are completely unseen human subjects) measures true real-world generalizability. Current static 128x128 eye-only crops hit a fundamental ceiling (~63% validation accuracy) due to three physical limitations:
+Evaluating models on a **100% Group-Isolated Dataset** (where validation/test drivers are completely unseen human subjects) measures true real-world generalizability. Current static 128x128 eye-only crops hit a fundamental ceiling (~61.5% validation accuracy) due to three physical and methodological limitations:
 
 1. **Single Static Frame Ambiguity:** A single frame cannot distinguish a normal **0.2-second eye blink** from a **2.0-second micro-sleep episode**.
 2. **Single ROI Blindness:** Isolated eye crops ignore complementary drowsiness indicators like **yawning (Mouth Opening Ratio - MAR)** and **head pitch tilting/nodding**.
@@ -15,109 +15,95 @@ Evaluating models on a **100% Group-Isolated Dataset** (where validation drivers
 
 ---
 
-## 🛠️ The 4-Step Engineering Masterplan
+## 🛠️ The 5-Phase Engineering Masterplan
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                        4-STEP ACCURACY ACCELERATION PIPELINE                           │
+│ Phase 0: Subject Split & Metric Foundation (Train / Val / Untouched Test)               │
 ├──────────────────────────┬──────────────────────────┬──────────────────────────────────┤
-│ 1. Multi-Modal Dual-ROI  │ 2. Temporal Sequence     │ 3. Focal Loss & Regularization   │
-│   (Eye + Mouth Yawn)     │   (10-Frame Window LSTM) │   (Hard Sample Focus)            │
-└──────────────────────────┴──────────────────────────┴──────────────────────────────────┘
+│ Phase 1: Focal Loss &    │ Phase 2: Dual-Branch     │ Phase 3: Temporal Sequence       │
+│ Photometric Augmentations│ Feature Fusion           │ (10-Frame ResNet + GRU)          │
+├──────────────────────────┴──────────────────────────┴──────────────────────────────────┤
+│ Phase 4: Final Evaluation on Untouched Test Set & Systematic Ablation Matrix           │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-### 1. 👁️👄 Multi-Modal Dual-ROI (Eye + Mouth Yawn Concatenation)
+### Phase 0 — Evaluation Foundation & Strict Leakage Prevention
 
-Instead of relying solely on eye crops, extract both **Eye ROI (128x128)** and **Mouth Yawn ROI (128x128)** using MediaPipe landmarks. Combine them into a dual-stream 6-channel or side-by-side 256x128 input tensor.
-
-- **Drowsiness Signal Synergy:**
-  $$\text{Drowsiness Score} = f(\text{Eyelid Closure (EAR)}, \text{Yawn Frequency (MAR)})$$
-  When the model observes both eyelid closure and yawning simultaneously, out-of-distribution classification accuracy increases by +15-20%.
+- **Subject/Session-Level Splitting Rule:**  
+  $$\text{Subject / Session ID} \longrightarrow \text{Train / Validation / Test Split} \longrightarrow \text{Sequence Generation}$$
+  *Never* perform random frame splits before sequence generation. 100% of frames/videos from any subject stay strictly in `train`, `val`, or `test` with **0.00% subject overlap**.
+- **Untouched Test Set:** Keep a separate test split reserved strictly for final reporting after all validation hyperparameter decisions are locked.
+- **Comprehensive Metric Suite:**
+  - **Accuracy**
+  - **Precision**
+  - **Recall / Sensitivity (Drowsy Recall)** (Critical for safety)
+  - **Specificity** ($\text{TN} / (\text{TN} + \text{FP})$)
+  - **F1-Score**
+  - **ROC-AUC**
+  - **Confusion Matrix**
 
 ---
 
-### 2. ⏱️ Temporal Sequence Windowing (10-Frame ConvLSTM / GRU)
+### Phase 1 — Focal Loss & Photometric Augmentation
 
-Feed a **10-frame sliding window sequence** (1.0 second video chunk) through a temporal aggregator (Temporal GRU or 3D-ResNet).
+- **Focal Loss Ablation:**  
+  Evaluate $\gamma \in \{1.0, 2.0, 3.0\}$ and tune $\alpha$ based on training distribution:
+  $$\text{FL}(p_t) = -\alpha_t (1 - p_t)^\gamma \log(p_t)$$
+- **Sensor-Grade Augmentations:**
+  - `ColorJitter(brightness=0.4, contrast=0.4, saturation=0.3, hue=0.05)`
+  - `RandomPerspective(distortion_scale=0.25, p=0.5)`
+  - `RandomAffine(degrees=10, translate=(0.1, 0.1), scale=(0.85, 1.15), shear=10)`
+  - `RandomErasing(p=0.3, scale=(0.02, 0.2))` (simulates sunglasses & hand occlusions)
 
-- **Blink vs. Micro-Sleep Classification:**
-  - **3 Consecutive Closed Frames (0.2s):** Classified as **ALERT (0)** (Normal Blink)
-  - **15+ Consecutive Closed Frames (1.5s):** Classified as **DROWSY (1)** (Micro-Sleep Episode)
+---
 
+### Phase 2 — Multi-Modal Dual-Branch Feature Fusion
+
+Instead of relying solely on eye crops or passive side-by-side concatenation, process Eye ROI (128x128) and Mouth ROI (128x128) through a **Two-Branch Feature Fusion Architecture**:
+
+```
+Eye ROI (128x128)   → ResNet Spatial Branch ─┐
+                                              ├→ Feature Concatenation → Classifier Head
+Mouth ROI (128x128) → ResNet Spatial Branch ─┘
+```
+
+---
+
+### Phase 3 — Temporal Sequence Aggregation (10-Frame ConvLSTM / ResNet + GRU)
+
+Feed a **10-frame sliding window sequence** (1.0 second video chunk) generated *after* subject splitting:
+- **3 Consecutive Closed Frames (0.2s):** Classified as **ALERT (0)** (Normal Blink)
+- **15+ Consecutive Closed Frames (1.5s):** Classified as **DROWSY (1)** (Micro-Sleep Episode)
+
+---
+
+### Phase 4 — Systematic Ablation Matrix
+
+| Experiment | Focal Loss | Augmentation | Dual ROI | Temporal GRU | Target Metric / Purpose |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Baseline** | ✗ | ✗ | ✗ | ✗ | ~61.5% reference (Cross-Entropy, no extra aug) |
+| **Exp A** | ✓ | ✗ | ✗ | ✗ | Isolate Focal Loss effect ($\gamma=1, 2, 3$) |
+| **Exp B** | ✗ | ✓ | ✗ | ✗ | Isolate Sensor Augmentation effect |
+| **Exp C** | ✓ | ✓ | ✗ | ✗ | Combined Phase 1 (Single-crop optimized) |
+| **Exp D** | ✓ | ✓ | ✓ | ✗ | Phase 2 (Two-branch feature fusion) |
+| **Exp E** | ✓ | ✓ | ✓ | ✓ | Final Model (Temporal sequence GRU) |
+
+---
+
+## 🧪 Verification Protocol & Finite Gradient Assurance
+
+In addition to forward-pass shape checks, explicitly verify gradient backpropagation and numerical stability:
 ```python
-import torch
-import torch.nn as nn
+loss = criterion(logits, targets)
+assert torch.isfinite(loss), "Loss contains NaN or Inf!"
 
-class TemporalDrowsinessModel(nn.Module):
-    """
-    Combines spatial feature extraction (ResNet-18) with temporal GRU sequence modeling.
-    """
-    def __init__(self, spatial_backbone, hidden_dim=128, num_classes=2):
-        super(TemporalDrowsinessModel, self).__init__()
-        self.backbone = spatial_backbone
-        in_features = self.backbone.fc.in_features
-        self.backbone.fc = nn.Identity() # Remove final classification head
+optimizer.zero_grad()
+loss.backward()
 
-        self.gru = nn.GRU(in_features, hidden_dim, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, num_classes)
-
-    def forward(self, x_seq):
-        # x_seq shape: (batch_size, sequence_length, C, H, W)
-        b, seq_len, c, h, w = x_seq.shape
-        x_flat = x_seq.view(b * seq_len, c, h, w)
-        features = self.backbone(x_flat) # (b * seq_len, in_features)
-        features = features.view(b, seq_len, -1)
-        
-        gru_out, _ = self.gru(features)
-        final_state = gru_out[:, -1, :] # Take last sequence step output
-        logits = self.fc(final_state)
-        return logits
+for param in model.parameters():
+    if param.grad is not None:
+        assert torch.isfinite(param.grad).all(), "Gradient contains NaN or Inf!"
 ```
-
----
-
-### 3. 🎯 Focal Loss for Hard Sample Focusing
-
-Replace standard Cross-Entropy Loss with **Focal Loss** ($\gamma = 2.0, \alpha = 0.25$) to down-weight easy background samples and concentrate gradient updates on difficult, ambiguous eyelid boundaries.
-
-$$\text{FL}(p_t) = -\alpha_t (1 - p_t)^\gamma \log(p_t)$$
-
-```python
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-
-    def forward(self, inputs, targets):
-        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
-        pt = torch.exp(-ce_loss)
-        focal_loss = self.alpha * ((1 - pt) ** self.gamma) * ce_loss
-        return focal_loss.mean()
-```
-
----
-
-### 4. 🎨 Photometric Lighting & Sensor Augmentations
-
-Enhance training data variance to simulate diverse night-vision IR cameras, sunlight glare, and glasses reflections:
-- `ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2)`
-- `RandomAffine(degrees=15, translate=(0.08, 0.08), scale=(0.9, 1.1))`
-- `RandomErasing(p=0.2, scale=(0.02, 0.2))` (Simulates partial occlusion by sunglasses/hands)
-
----
-
-## 📊 Expected Performance Milestones
-
-| Upgrade Phase | Model Architecture | Expected Validation Acc (%) | Expected Drowsy Recall (%) | Key Improvement |
-| :--- | :--- | :---: | :---: | :--- |
-| **Baseline** | Static `custom_cnn` | 55.83% | 55.98% | Baseline single-crop |
-| **Phase 1** | Static `resnet18` | 61.56% | 73.72% | Pretrained ImageNet Transfer |
-| **Phase 2** | Dual-ROI (Eye + Mouth) + Focal Loss | **78% – 84%** | **85%+** | Multi-modal facial cues |
-| **Phase 3** | 10-Frame Temporal GRU + Augmentations | **90% – 94%+** | **95%+** | Micro-sleep vs Blink resolution |

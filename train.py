@@ -9,11 +9,12 @@ from tqdm import tqdm
 from models.model_factory import get_model_and_config, count_parameters
 from data.dataset_loader import create_dataloaders
 from utils.metrics import evaluate_model_performance, save_evaluation_matrix
+from utils.losses import FocalLoss
 from xai.grad_cam import GradCAM
 from xai.visualizer import overlay_heatmap, plot_xai_comparison
 import numpy as np
 
-def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs=10, batch_size=32, lr=None, device='cuda'):
+def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs=10, batch_size=32, lr=None, device='cuda', loss_type='focal'):
     """
     Main training and validation loop for Driver Drowsiness Detection.
     Applies paradigm-specific optimization protocols (AdamW, weight decay, learning rates) automatically.
@@ -40,10 +41,13 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
     effective_lr = lr if lr is not None else config.get('lr', 1e-3)
     weight_decay = config.get('weight_decay', 1e-4)
 
-    print(f"[*] Paradigm Protocol: {config.get('opt_type', 'AdamW')} | LR: {effective_lr} | Weight Decay: {weight_decay}")
+    print(f"[*] Paradigm Protocol: {config.get('opt_type', 'AdamW')} | LR: {effective_lr} | Weight Decay: {weight_decay} | Loss: {loss_type.upper()}")
     print(f"[*] Trainable Parameters: {count_parameters(model):.2f} Million")
 
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    if loss_type.lower() == 'focal':
+        criterion = FocalLoss(alpha=0.25, gamma=2.0)
+    else:
+        criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = optim.AdamW(model.parameters(), lr=effective_lr, weight_decay=weight_decay)
 
     if config.get('scheduler') == 'cosine':
@@ -192,15 +196,16 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Drowsiness Detection Deep Learning Models with XAI.")
-    parser.add_argument("--model", type=str, default="vgg16", choices=['custom_cnn', 'vgg16', 'vgg19', 'resnet18', 'resnet50', 'mobilenet_v2', 'mobilenet_v3', 'efficientnet_b0', 'vit_tiny'])
+    parser.add_argument("--model", type=str, default="resnet18", choices=['custom_cnn', 'vgg16', 'vgg19', 'resnet18', 'resnet50', 'dual_branch_resnet18', 'temporal_resnet18', 'temporal_resnet50', 'mobilenet_v2', 'mobilenet_v3', 'efficientnet_b0', 'vit_tiny'])
     parser.add_argument("--dataset_dir", type=str, default="processed_dataset")
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--loss", type=str, default="focal", choices=['focal', 'cross_entropy'])
     parser.add_argument("--device", type=str, default="cuda")
 
     args = parser.parse_args()
     if os.path.exists(args.dataset_dir):
-        train_model(model_name=args.model, dataset_dir=args.dataset_dir, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, device=args.device)
+        train_model(model_name=args.model, dataset_dir=args.dataset_dir, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, device=args.device, loss_type=args.loss)
     else:
         print(f"[!] Dataset directory '{args.dataset_dir}' not found. Please run 'python data/preprocess_mixed_data.py --raw_dir <your_raw_folder>' first.")

@@ -45,11 +45,17 @@ def evaluate_model_performance(model, dataloader, device='cpu'):
         auc = 0.5
 
     cm = confusion_matrix(all_targets, all_preds)
+    if cm.shape == (2, 2):
+        tn, fp, fn, tp = cm.ravel()
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+    else:
+        specificity = 0.0
 
     return {
         'accuracy': acc,
         'precision': prec,
         'recall': rec,
+        'specificity': specificity,
         'f1_score': f1,
         'roc_auc': auc,
         'confusion_matrix': cm,
@@ -157,6 +163,7 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
         'accuracy': float(metrics['accuracy']),
         'precision': float(metrics['precision']),
         'recall': float(metrics['recall']),
+        'specificity': float(metrics.get('specificity', 0.0)),
         'f1_score': float(metrics['f1_score']),
         'roc_auc': float(metrics['roc_auc']),
         'fps': float(metrics['fps']),
@@ -178,6 +185,7 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
         f.write(f"Overall Accuracy:  {metrics['accuracy']*100:.2f}%\n")
         f.write(f"Precision:         {metrics['precision']:.4f}\n")
         f.write(f"Recall:            {metrics['recall']:.4f}\n")
+        f.write(f"Specificity:       {metrics.get('specificity', 0.0):.4f}\n")
         f.write(f"F1-Score:          {metrics['f1_score']:.4f}\n")
         f.write(f"ROC-AUC:           {metrics['roc_auc']:.4f}\n")
         f.write(f"Inference Latency: {metrics['latency_ms']:.2f} ms/sample\n")

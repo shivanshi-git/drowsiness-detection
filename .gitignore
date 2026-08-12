@@ -24,17 +24,15 @@ wheels/
 .installed.cfg
 *.egg
 
-# PyTorch Checkpoints & Weights
+# PyTorch Checkpoints & Weights (Heavy model binaries ignored)
 checkpoints/
+saved_models/
 *.pth
 *.pt
 *.onnx
 *.engine
-*.pth
 
-# Allow tracking saved_models and results directory artifacts for git push
-!saved_models/
-!saved_models/*
+# Track evaluation results directory artifacts for git push
 !results/
 !results/*
 

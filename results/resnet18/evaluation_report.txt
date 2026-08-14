@@ -8,8 +8,8 @@ Recall:            0.6745
 Specificity:       0.5338
 F1-Score:          0.6271
 ROC-AUC:           0.5889
-Inference Latency: 0.18 ms/sample
-FPS Throughput:    5466.7 FPS
+Inference Latency: 0.19 ms/sample
+FPS Throughput:    5146.5 FPS
 
 Epoch-by-Epoch Training Details:
 Epoch | Train Loss | Train Acc (%) | Val Loss | Val Acc (%)

@@ -31,6 +31,12 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
         device = torch.device(device)
     print(f"[*] Training Model: '{model_name}' on Device: {device}")
 
+    # Auto-route Dual-Branch & Temporal models to processed_dual_dataset if available
+    if model_name in ['dual_branch_resnet18', 'temporal_resnet18', 'temporal_resnet50']:
+        if os.path.exists("processed_dual_dataset"):
+            dataset_dir = "processed_dual_dataset"
+            print(f"[*] Dual-ROI Model detected: Automatically using Dual-ROI dataset from '{dataset_dir}' (256x128 resolution)")
+
     # Create DataLoaders
     train_loader, val_loader, class_names = create_dataloaders(dataset_dir=dataset_dir, batch_size=batch_size)
 

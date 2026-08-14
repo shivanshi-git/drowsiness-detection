@@ -31,12 +31,18 @@ def get_data_transforms(img_size=(128, 128)):
 
     return train_transform, val_transform
 
-def create_dataloaders(dataset_dir="processed_dataset", batch_size=32, num_workers=4, img_size=(128, 128)):
+def create_dataloaders(dataset_dir="processed_dataset", batch_size=32, num_workers=4, img_size=None):
     """
     Constructs PyTorch DataLoaders for train and validation splits.
     """
     train_dir = os.path.join(dataset_dir, "train")
     val_dir = os.path.join(dataset_dir, "val")
+
+    if img_size is None:
+        if "dual" in dataset_dir.lower():
+            img_size = (128, 256)
+        else:
+            img_size = (128, 128)
 
     train_transform, val_transform = get_data_transforms(img_size=img_size)
 

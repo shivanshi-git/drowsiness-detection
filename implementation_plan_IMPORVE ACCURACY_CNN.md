@@ -42,3 +42,6 @@ We will optimize the hyperparameters in `train.py`.
 ### Manual Verification
 - Review the `training_curves.png` and `confusion_matrix.png` generated at the end to confirm 90%+ performance.
 - Verify that inference (`predict.py`) still runs fast (high FPS).
+ l
+ 
+ ets do a gtihub check

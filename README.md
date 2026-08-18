@@ -1,6 +1,6 @@
 # Driver Drowsiness Detection System with Explainable AI (XAI)
 
-A comprehensive Deep Learning framework for real-time **Driver Drowsiness Detection**, featuring **12 candidate model architectures** (VGG16, ResNet, MobileNet, EfficientNet, ViT, Custom CNN) integrated with **Grad-CAM Explainable AI** and an interactive **Streamlit Dashboard**.
+A research prototype for **Driver Drowsiness Detection** with several candidate image models, Grad-CAM visualizations, and an interactive Streamlit dashboard. The project is not yet a validated safety-critical deployment.
 
 ---
 
@@ -68,8 +68,8 @@ graph TD
 
 ### 1. Install Dependencies
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+.venv\\Scripts\\activate
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
@@ -84,12 +84,13 @@ python data/preprocess_mixed_data.py
 ```bash
 python train.py --model custom_cnn --dataset_dir processed_dataset --epochs 25 --batch_size 32
 ```
-*Make sure to check the accuracy before proceeding to the next model!*
+Training checkpoints are written to `saved_models/`; the dashboard loads the best matching checkpoint from that directory.
 
 ### 4. Single Image Prediction & XAI
 ```bash
 python predict.py --image path/to/image.jpg --model custom_cnn --out output_xai.jpg
 ```
+Pass a trained checkpoint explicitly with `--checkpoint saved_models/custom_cnn_best_model.pth`.
 
 ### 5. Launch Interactive Dashboard
 ```bash

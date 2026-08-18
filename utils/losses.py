@@ -25,9 +25,10 @@ class FocalLoss(nn.Module):
         pt = torch.exp(-ce_loss)
         
         if isinstance(self.alpha, (float, int)):
-            alpha_t = self.alpha
-        elif isinstance(self.alpha, (list, torch.Tensor)):
-            alpha_t = torch.tensor(self.alpha, device=inputs.device)[targets]
+            alpha_t = torch.where(targets == 1, self.alpha, 1.0 - self.alpha)
+        elif isinstance(self.alpha, (list, tuple, torch.Tensor)):
+            alpha_values = torch.as_tensor(self.alpha, device=inputs.device, dtype=inputs.dtype)
+            alpha_t = alpha_values[targets]
         else:
             alpha_t = 1.0
 

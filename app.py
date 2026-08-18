@@ -3,6 +3,7 @@ import cv2
 import torch
 import numpy as np
 import streamlit as st
+from collections import deque
 from PIL import Image
 from torchvision import transforms
 
@@ -102,14 +103,18 @@ def load_selected_model(name):
         yolo_model.eval()
         return yolo_model, None, device
 
-    model, target_layer = get_model(model_name=name, num_classes=2, pretrained=True)
-    checkpoint_path = os.path.join("checkpoints", name, "best_model.pth")
-    if os.path.exists(checkpoint_path):
+    model, target_layer = get_model(model_name=name, num_classes=2, pretrained=False)
+    checkpoint_candidates = [
+        os.path.join("saved_models", f"{name}_best_model.pth"),
+        os.path.join("saved_models", f"{name}_drowsiness_model.pth"),
+    ]
+    checkpoint_path = next((path for path in checkpoint_candidates if os.path.exists(path)), None)
+    if checkpoint_path:
         checkpoint = torch.load(checkpoint_path, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
         st.sidebar.success(f"✓ Loaded trained weights from checkpoint ({name})")
     else:
-        st.sidebar.info(f"ℹ Using pre-trained ImageNet backbone ({name})")
+        st.sidebar.warning(f"⚠ No trained checkpoint found for {name}; using randomly initialized weights")
     model = model.to(device)
     model.eval()
     return model, target_layer, device
@@ -266,6 +271,7 @@ with tab2:
 
     if run_cam:
         cap = cv2.VideoCapture(0)
+        drowsy_votes = deque(maxlen=15)
         while run_cam and cap.isOpened():
             ret, frame = cap.read()
             if not ret:
@@ -276,15 +282,27 @@ with tab2:
                 results = model(frame)
                 annotated_bgr = np.squeeze(results.render())
                 ear, mar, is_closed, is_yawning, _ = face_analyzer.process_frame(frame)
+                model_probability = 0.0
             elif model_choice == 'hierarchical_fusion':
                 ear, mar, is_closed, is_yawning, annotated_bgr = face_analyzer.process_frame(frame)
+                model_probability = 1.0 if is_closed or is_yawning else 0.0
             else:
                 ear, mar, is_closed, is_yawning, annotated_bgr = face_analyzer.process_frame(frame)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame_tensor = transforms.Compose([
+                    transforms.Resize((128, 128)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ])(Image.fromarray(frame_rgb)).unsqueeze(0).to(device)
+                with torch.inference_mode():
+                    model_probability = torch.softmax(model(frame_tensor), dim=1)[0, 1].item()
 
-            status_text = "DROWSY ALARM!" if is_closed or is_yawning else "ALERT"
+            drowsy_votes.append(model_probability >= confidence_threshold or is_closed or is_yawning)
+            drowsy_detected = sum(drowsy_votes) >= min(3, len(drowsy_votes))
+            status_text = "DROWSY ALARM!" if drowsy_detected else "ALERT"
             color = (0, 0, 255) if status_text == "DROWSY ALARM!" else (0, 255, 0)
             
-            cv2.putText(annotated_bgr, f"Status: {status_text} | EAR: {ear:.2f} | MAR: {mar:.2f}", 
+            cv2.putText(annotated_bgr, f"Status: {status_text} | P(Drowsy): {model_probability:.2f} | EAR: {ear:.2f} | MAR: {mar:.2f}", 
                         (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
             cam_placeholder.image(cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB), channels="RGB", use_container_width=True)

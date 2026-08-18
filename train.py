@@ -29,6 +29,14 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
         device = torch.device('cuda')
     else:
         device = torch.device(device)
+
+    if model_name.startswith('temporal_'):
+        raise ValueError(
+            "Temporal models require a sequence dataset with shape "
+            "(batch, sequence, channels, height, width); the current ImageFolder "
+            "pipeline provides single images and cannot train this model honestly."
+        )
+
     print(f"[*] Training Model: '{model_name}' on Device: {device}")
 
     # Auto-route Dual-Branch & Temporal models to processed_dual_dataset if available

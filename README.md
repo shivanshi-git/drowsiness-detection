@@ -85,6 +85,13 @@ python data/preprocess_mixed_data.py
 python train.py --model custom_cnn --dataset_dir processed_dataset --epochs 25 --batch_size 32
 ```
 Training checkpoints are written to `saved_models/`; the dashboard loads the best matching checkpoint from that directory.
+For balanced classes, the training default uses `--focal_alpha 0.5`; tune it only on the validation split, never on the held-out test split.
+
+Before calling a model production-ready, run the fail-closed evidence check:
+```bash
+python validate_production_readiness.py --model custom_cnn
+```
+It requires train/validation/test splits, a best checkpoint, and a held-out-test report with calibration metrics.
 
 ### 4. Single Image Prediction & XAI
 ```bash

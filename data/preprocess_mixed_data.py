@@ -235,14 +235,16 @@ class MixedDataPreprocessor:
 
         return saved_count
 
-    def build_unified_dataset(self, raw_data_dirs, output_dir="processed_dataset", val_split=0.2, max_samples_per_class=3000):
+    def build_unified_dataset(self, raw_data_dirs, output_dir="processed_dataset", val_split=0.15, test_split=0.15, max_samples_per_class=3000):
         """
         Scans raw_data_dirs (list of folders or single folder).
         Performs group-aware splitting at subject/video level so 100% of any subject's data stays in train OR val.
-        Extracts crops and organizes them into 'processed_dataset/train' and 'processed_dataset/val'.
+        Extracts crops and organizes them into disjoint train, val, and test splits.
         """
         if isinstance(raw_data_dirs, str):
             raw_data_dirs = [raw_data_dirs]
+        if val_split < 0 or test_split < 0 or val_split + test_split >= 1:
+            raise ValueError("val_split and test_split must be non-negative and sum to less than 1")
 
         print(f"[*] Initializing Unified Data Preprocessor (Group-Aware Split)...")
         print(f"[*] Source Directories: {raw_data_dirs}")
@@ -255,8 +257,9 @@ class MixedDataPreprocessor:
 
         train_dir = os.path.join(output_dir, "train")
         val_dir = os.path.join(output_dir, "val")
+        test_dir = os.path.join(output_dir, "test")
 
-        for split in [train_dir, val_dir]:
+        for split in [train_dir, val_dir, test_dir]:
             for label in ["0_alert", "1_drowsy"]:
                 os.makedirs(os.path.join(split, label), exist_ok=True)
 
@@ -304,24 +307,33 @@ class MixedDataPreprocessor:
 
         train_gids = set()
         val_gids = set()
+        test_gids = set()
 
         total_alert_count = len(alert_files)
         total_drowsy_count = len(drowsy_files)
 
         val_alert_target = int(total_alert_count * val_split)
         val_drowsy_target = int(total_drowsy_count * val_split)
+        test_alert_target = int(total_alert_count * test_split)
+        test_drowsy_target = int(total_drowsy_count * test_split)
 
         curr_val_alert = 0
         curr_val_drowsy = 0
+        curr_test_alert = 0
+        curr_test_drowsy = 0
 
-        # Assign groups to val split until targets reached, rest to train
+        # Assign groups to test, then validation; all remaining groups stay in train.
         for gid in sorted_gids:
             num_alert = len(groups[gid]['alert'])
             num_drowsy = len(groups[gid]['drowsy'])
 
-            # Allocate to val if val targets not yet met
-            if (curr_val_alert + num_alert <= val_alert_target and curr_val_alert < val_alert_target) or \
-               (curr_val_drowsy + num_drowsy <= val_drowsy_target and curr_val_drowsy < val_drowsy_target):
+            if (curr_test_alert + num_alert <= test_alert_target and curr_test_alert < test_alert_target) or \
+               (curr_test_drowsy + num_drowsy <= test_drowsy_target and curr_test_drowsy < test_drowsy_target):
+                test_gids.add(gid)
+                curr_test_alert += num_alert
+                curr_test_drowsy += num_drowsy
+            elif (curr_val_alert + num_alert <= val_alert_target and curr_val_alert < val_alert_target) or \
+                 (curr_val_drowsy + num_drowsy <= val_drowsy_target and curr_val_drowsy < val_drowsy_target):
                 val_gids.add(gid)
                 curr_val_alert += num_alert
                 curr_val_drowsy += num_drowsy
@@ -331,11 +343,14 @@ class MixedDataPreprocessor:
         print(f"[*] Group Split Allocation:")
         print(f"    - Train Groups: {len(train_gids)} subjects/sources")
         print(f"    - Val Groups:   {len(val_gids)} subjects/sources")
+        print(f"    - Test Groups:  {len(test_gids)} subjects/sources")
 
         train_alert_files = [f for gid in train_gids for f in groups[gid]['alert']]
         train_drowsy_files = [f for gid in train_gids for f in groups[gid]['drowsy']]
         val_alert_files = [f for gid in val_gids for f in groups[gid]['alert']]
         val_drowsy_files = [f for gid in val_gids for f in groups[gid]['drowsy']]
+        test_alert_files = [f for gid in test_gids for f in groups[gid]['alert']]
+        test_drowsy_files = [f for gid in test_gids for f in groups[gid]['drowsy']]
 
         np.random.seed(42)
         np.random.shuffle(train_alert_files)
@@ -347,11 +362,14 @@ class MixedDataPreprocessor:
         if max_samples_per_class and max_samples_per_class > 0:
             train_max = int(max_samples_per_class * (1 - val_split))
             val_max = int(max_samples_per_class * val_split)
+            test_max = int(max_samples_per_class * test_split)
 
             train_alert_files = train_alert_files[:train_max]
             train_drowsy_files = train_drowsy_files[:train_max]
             val_alert_files = val_alert_files[:val_max]
             val_drowsy_files = val_drowsy_files[:val_max]
+            test_alert_files = test_alert_files[:test_max]
+            test_drowsy_files = test_drowsy_files[:test_max]
         else:
             # Physical 50/50 balancing on full dataset
             train_balanced_count = min(len(train_alert_files), len(train_drowsy_files))
@@ -361,6 +379,9 @@ class MixedDataPreprocessor:
             train_drowsy_files = train_drowsy_files[:train_balanced_count]
             val_alert_files = val_alert_files[:val_balanced_count]
             val_drowsy_files = val_drowsy_files[:val_balanced_count]
+            test_balanced_count = min(len(test_alert_files), len(test_drowsy_files))
+            test_alert_files = test_alert_files[:test_balanced_count]
+            test_drowsy_files = test_drowsy_files[:test_balanced_count]
 
         print(f"[*] Physical 50/50 Balanced Split Allocation:")
         print(f"    - Train Split (50/50): {len(train_alert_files):,} Alert / {len(train_drowsy_files):,} Drowsy ({len(train_alert_files)*2:,} total)")
@@ -368,9 +389,10 @@ class MixedDataPreprocessor:
 
         train_items = [(f, "0_alert") for f in train_alert_files] + [(f, "1_drowsy") for f in train_drowsy_files]
         val_items = [(f, "0_alert") for f in val_alert_files] + [(f, "1_drowsy") for f in val_drowsy_files]
+        test_items = [(f, "0_alert") for f in test_alert_files] + [(f, "1_drowsy") for f in test_drowsy_files]
 
-        for split_name, item_list in [("train", train_items), ("val", val_items)]:
-            dest_base = train_dir if split_name == "train" else val_dir
+        for split_name, item_list in [("train", train_items), ("val", val_items), ("test", test_items)]:
+            dest_base = {"train": train_dir, "val": val_dir, "test": test_dir}[split_name]
             print(f"[*] Processing {split_name} split ({len(item_list)} files)...")
 
             for filepath, label_str in tqdm(item_list):

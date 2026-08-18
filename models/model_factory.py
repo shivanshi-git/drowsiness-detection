@@ -7,6 +7,8 @@ from .efficientnet_model import EfficientNetModel
 from .vit_model import ViTTinyModel
 from .temporal_model import TemporalDrowsinessModel
 from .dual_branch_model import DualBranchResNet
+from .eye_model import EyeStateModel
+from .face_model import FaceDrowsinessModel
 
 def get_model(model_name='vgg16', num_classes=2, pretrained=True):
     """
@@ -16,6 +18,8 @@ def get_model(model_name='vgg16', num_classes=2, pretrained=True):
       - 'custom_cnn'
       - 'vgg16', 'vgg19'
       - 'resnet18', 'resnet50'
+      - 'eye_resnet18'
+      - 'face_resnet18'
       - 'dual_branch_resnet18'
       - 'temporal_resnet18', 'temporal_resnet50'
       - 'mobilenet_v2', 'mobilenet_v3'
@@ -27,6 +31,12 @@ def get_model(model_name='vgg16', num_classes=2, pretrained=True):
     if model_name == 'custom_cnn':
         model = CustomCNN(num_classes=num_classes)
         target_layer = model.features[4] # Final Residual Block (layer4)
+    elif model_name == 'eye_resnet18':
+        model = EyeStateModel(num_classes=num_classes, pretrained=pretrained)
+        target_layer = model.target_layer
+    elif model_name == 'face_resnet18':
+        model = FaceDrowsinessModel(num_classes=num_classes, pretrained=pretrained)
+        target_layer = model.target_layer
     elif model_name in ['vgg16', 'vgg19']:
         model = VGGModel(model_name=model_name, num_classes=num_classes, pretrained=pretrained)
         target_layer = model.features[-2] # Final Conv layer before pool

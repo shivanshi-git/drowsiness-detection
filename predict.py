@@ -10,7 +10,7 @@ from models.model_factory import get_model
 from xai.grad_cam import GradCAM
 from xai.visualizer import overlay_heatmap
 
-def run_prediction(image_path, model_name='vgg16', checkpoint_path=None, device='cpu'):
+def run_prediction(image_path, model_name='resnet18', checkpoint_path=None, device='cpu'):
     """
     Infers drowsiness prediction on an input image and returns blended Grad-CAM heatmap.
     """
@@ -66,7 +66,7 @@ def run_prediction(image_path, model_name='vgg16', checkpoint_path=None, device=
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Predict drowsiness & generate Grad-CAM for a single image.")
     parser.add_argument("--image", type=str, required=True, help="Path to input image file")
-    parser.add_argument("--model", type=str, default="vgg16")
+    parser.add_argument("--model", type=str, default="resnet18")
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--out", type=str, default="prediction_xai_output.jpg")
     args = parser.parse_args()

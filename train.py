@@ -14,7 +14,7 @@ from xai.grad_cam import GradCAM
 from xai.visualizer import overlay_heatmap, plot_xai_comparison
 import numpy as np
 
-def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs=10, batch_size=32, lr=None, device='cuda', loss_type='focal', focal_alpha=0.5):
+def train_model(model_name='resnet18', dataset_dir='processed_dataset', epochs=15, batch_size=32, lr=None, device='cuda', loss_type='focal', focal_alpha=0.5):
     """
     Main training and validation loop for Driver Drowsiness Detection.
     Applies paradigm-specific optimization protocols (AdamW, weight decay, learning rates) automatically.
@@ -231,7 +231,7 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Drowsiness Detection Deep Learning Models with XAI.")
-    parser.add_argument("--model", type=str, default="resnet18", choices=['custom_cnn', 'vgg16', 'vgg19', 'resnet18', 'resnet50', 'dual_branch_resnet18', 'temporal_resnet18', 'temporal_resnet50', 'mobilenet_v2', 'mobilenet_v3', 'efficientnet_b0', 'vit_tiny'])
+    parser.add_argument("--model", type=str, default="resnet18", choices=['resnet18'])
     parser.add_argument("--dataset_dir", type=str, default="processed_dataset")
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--batch_size", type=int, default=32)

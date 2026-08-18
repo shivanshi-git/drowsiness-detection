@@ -1,6 +1,6 @@
 # Driver Drowsiness Detection System with Explainable AI (XAI)
 
-A research prototype for **Driver Drowsiness Detection** with several candidate image models, Grad-CAM visualizations, and an interactive Streamlit dashboard. The project is not yet a validated safety-critical deployment.
+A research prototype for **Driver Drowsiness Detection** using a canonical ResNet18 image model, Grad-CAM visualizations, PERCLOS temporal buffering, and an interactive Streamlit dashboard. The project is not yet a validated safety-critical deployment.
 
 ---
 
@@ -21,11 +21,11 @@ A research prototype for **Driver Drowsiness Detection** with several candidate 
 | :--- | :--- |
 | `app.py` | Streamlit interactive web dashboard for real-time predictions and model comparison. |
 | `train.py` | Core training script to train and fine-tune individual models (saves evaluation metrics, graphs, and models). |
-| `train_all_models.py` | Script to sequentially train all candidate models and generate a comparative leaderboard. |
+| `train_all_models.py` | Reproducible ResNet18 training entry point. |
 | `predict.py` | Inference script to predict drowsiness on a single image and generate Grad-CAM heatmaps. |
 | `data/preprocess_mixed_data.py` | Unified dataset preprocessor. Merges images/videos from multiple archives into a balanced structure. |
 | `data/dataset_loader.py` | PyTorch `Dataset` and `DataLoader` setup with data augmentation (Albumentations/Torchvision). |
-| `models/model_factory.py` | Contains the definitions and factory functions for all candidate architectures. |
+| `models/model_factory.py` | Creates the active ResNet18 model and retains legacy experimental constructors. |
 | `models/custom_cnn.py` | Defines the specific lightweight Custom CNN architecture designed for fast inference. |
 | `utils/metrics.py` | Helper functions for calculating evaluation matrices, ROC curves, and logging training results. |
 | `utils/face_mesh.py` | Hybrid geometric metrics implementation (e.g., EAR, MAR calculation using MediaPipe). |
@@ -56,9 +56,7 @@ graph TD
 
 | Model Architecture | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Latency (ms) | FPS |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Custom CNN** | *Training...* | - | - | - | - | - | - |
-| **MobileNetV2** | *Pending...* | - | - | - | - | - | - |
-| **ResNet50** | *Pending...* | - | - | - | - | - | - |
+| **ResNet18** | *Train with the command below* | - | - | - | - | - | - |
 
 *(All evaluation graphs, confusion matrices, and ROC curves are automatically saved in the `results/` directory after each training run).*
 
@@ -80,7 +78,7 @@ Place raw data in `archive/`, `archive(1)/`, etc., and run the preprocessor:
 python data/preprocess_mixed_data.py
 ```
 
-### 3. Fine-Tune a Model (e.g., Custom CNN for 25 Epochs)
+### 3. Fine-Tune the Canonical ResNet18 Model
 ```bash
 python train.py --model custom_cnn --dataset_dir processed_dataset --epochs 25 --batch_size 32
 ```

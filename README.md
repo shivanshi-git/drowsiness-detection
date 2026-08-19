@@ -1,103 +1,132 @@
-# Driver Drowsiness Detection System with Explainable AI (XAI)
+# Low-Light Driver Drowsiness Detection: SOTA Transformer Pipeline
 
-A research prototype for **Driver Drowsiness Detection** using a canonical ResNet18 image model, Grad-CAM visualizations, PERCLOS temporal buffering, and an interactive Streamlit dashboard. The project is not yet a validated safety-critical deployment.
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![NTHU-DDD](https://img.shields.io/badge/Benchmark-NTHU--DDD-green.svg)](https://cv.cs.nthu.edu.tw/)
 
----
-
-## 🛠️ Libraries and Frameworks Used
-- **PyTorch & Torchvision**: Core deep learning framework used for model building, training, and evaluation.
-- **OpenCV**: Used for real-time video and image processing, face detection, and ROI extraction.
-- **MediaPipe**: Used for high-fidelity facial landmark detection to extract eye and mouth regions.
-- **Scikit-Learn**: Utilized for evaluation metrics (precision, recall, F1-score, ROC-AUC) and confusion matrix generation.
-- **Matplotlib & Seaborn**: Used for plotting training curves, heatmaps, and matrices.
-- **Streamlit**: Used to build the interactive web dashboard.
-- **NumPy & Pandas**: Essential for numerical operations and data structuring.
+A State-of-the-Art (SOTA) Deep Learning pipeline for driver drowsiness and microsleep detection designed specifically for **low-light, infrared (IR), and challenging in-cabin nighttime driving scenarios** evaluated on the **NTHU Driver Drowsiness Detection (NTHU-DDD)** dataset.
 
 ---
 
-## 📂 Project Structure & File Descriptions
+## 🏛️ Pipeline Architecture
 
-| File / Directory | Purpose |
-| :--- | :--- |
-| `app.py` | Streamlit interactive web dashboard for real-time predictions and model comparison. |
-| `train.py` | Core training script to train and fine-tune individual models (saves evaluation metrics, graphs, and models). |
-| `train_all_models.py` | Reproducible ResNet18 training entry point. |
-| `predict.py` | Inference script to predict drowsiness on a single image and generate Grad-CAM heatmaps. |
-| `data/preprocess_mixed_data.py` | Unified dataset preprocessor. Merges images/videos from multiple archives into a balanced structure. |
-| `data/dataset_loader.py` | PyTorch `Dataset` and `DataLoader` setup with data augmentation (Albumentations/Torchvision). |
-| `models/model_factory.py` | Creates the active ResNet18 model and retains legacy experimental constructors. |
-| `models/custom_cnn.py` | Defines the specific lightweight Custom CNN architecture designed for fast inference. |
-| `utils/metrics.py` | Helper functions for calculating evaluation matrices, ROC curves, and logging training results. |
-| `utils/face_mesh.py` | Hybrid geometric metrics implementation (e.g., EAR, MAR calculation using MediaPipe). |
-| `xai/grad_cam.py` | Explainable AI engine using Gradient-weighted Class Activation Mapping to visualize model attention. |
-
----
-
-## 🔄 Code Flow Diagram
-
-```mermaid
-graph TD
-    A[Raw Data Archives] -->|preprocess_mixed_data.py| B(Processed Dataset)
-    B -->|dataset_loader.py| C{DataLoader}
-    C -->|train.py| D[Model Training & Fine-Tuning]
-    D -->|model_factory.py| E((Candidate Models))
-    D --> F[Saved Models .pth]
-    D --> G[Evaluation Results]
-    G --> H(Metrics, Graphs, Heatmaps)
-    F --> I[predict.py / app.py]
-    I -->|xai/grad_cam.py| J[Grad-CAM Visualizations]
+```
+Raw Low-Light / IR Video Stream
+  │
+  ▼
+[ 1. RetinaFace Face & Landmark Localization ]
+  │  ├── Face Bounding Box & 5-point Keypoints
+  │  └── Dynamic RoI Extractor (Face, Left Eye, Right Eye, Mouth)
+  │
+  ▼
+[ 2. LLFormer (Low-Light Enhancement Transformer) ]
+  │  ├── Multi-Dconv Head Transposed Attention (MDTA)
+  │  └── Gated-Dconv Feed-Forward Network (GDFN)
+  │
+  ├───► [ 3A. Region-Aware ViT (Spatial Stream) ]
+  │         ├── Patch Embedding + Region Type Embeddings (Face/Eye/Mouth)
+  │         └── Multi-layer Self-Attention
+  │
+  └───► [ 3B. Optical Flow ViT (Motion Stream) ]
+            ├── Dense Velocity Flow (dx, dy)
+            └── Dynamic Motion Tokenization
+  │
+  ▼
+[ 4. Bidirectional Cross-Attention Fusion ]
+  │  └── Fuses Spatial Semantics with Motion Velocity Fields
+  │
+  ▼
+[ 5. Spatial & Channel Attention Module (CBAM-like) ]
+  │  └── Filters cabin noise and highlights fatigue-critical regions
+  │
+  ▼
+[ 6. Temporal Sequence Transformer ]
+  │  └── Models sequence-level dynamics across sliding temporal windows (16-32 frames)
+  │
+  ▼
+[ 7. Multi-Class Fatigue Classification Head ]
+  │  └── 5 States: Normal, Slow Blinking, Yawning, Nodding, Eye Closure
+  │
+  ▼
+[ 8. Adaptive Real-Time Alarm Engine ]
+     ├── Tier 0: Attentive (Green)
+     ├── Tier 1: Visual Notice (Yellow) - $P(\text{drowsy}) \ge 0.45$
+     ├── Tier 2: Caution Chime (Orange) - $P(\text{drowsy}) \ge 0.65$ or PERCLOS $> 15\%$
+     └── Tier 3: Critical Siren (Red) - $P(\text{drowsy}) \ge 0.85$ or Closure $> 1.5\text{s}$
 ```
 
 ---
 
-## 📊 Evaluation Matrix
+## 🚀 Quick Start
 
-*The table below will be updated as models complete their 25-epoch fine-tuning.*
+### 1. Installation
 
-| Model Architecture | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Latency (ms) | FPS |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ResNet18** | *Train with the command below* | - | - | - | - | - | - |
-
-*(All evaluation graphs, confusion matrices, and ROC curves are automatically saved in the `results/` directory after each training run).*
-
----
-
-## ⚡ Terminal Commands to Start the Project
-
-### 1. Install Dependencies
 ```bash
-python -m venv .venv
-.venv\\Scripts\\activate
-pip install --upgrade pip
+git clone https://github.com/your-org/drowsiness-detection.git
+cd "drowsiness detection"
 pip install -r requirements.txt
 ```
 
-### 2. Prepare Dataset
-Place raw data in `archive/`, `archive(1)/`, etc., and run the preprocessor:
+### 2. Run Test Suite
+
+Verify all pipeline modules and forward passes:
+
 ```bash
-python data/preprocess_mixed_data.py
+python tests/test_pipeline.py
 ```
 
-### 3. Fine-Tune the Canonical ResNet18 Model
-```bash
-python train.py --model custom_cnn --dataset_dir processed_dataset --epochs 25 --batch_size 32
-```
-Training checkpoints are written to `saved_models/`; the dashboard loads the best matching checkpoint from that directory.
-For balanced classes, the training default uses `--focal_alpha 0.5`; tune it only on the validation split, never on the held-out test split.
+### 3. Training on NTHU-DDD Dataset
 
-Before calling a model production-ready, run the fail-closed evidence check:
-```bash
-python validate_production_readiness.py --model custom_cnn
-```
-It requires train/validation/test splits, a best checkpoint, and a held-out-test report with calibration metrics.
+Configure parameters in [`configs/nthu_ddd_config.yaml`](configs/nthu_ddd_config.yaml) and start training:
 
-### 4. Single Image Prediction & XAI
 ```bash
-python predict.py --image path/to/image.jpg --model custom_cnn --out output_xai.jpg
+python train_nthu.py --config configs/nthu_ddd_config.yaml
 ```
-Pass a trained checkpoint explicitly with `--checkpoint saved_models/custom_cnn_best_model.pth`.
 
-### 5. Launch Interactive Dashboard
+### 4. Subject-Independent Benchmark Evaluation
+
 ```bash
-streamlit run app.py
+python evaluation/nthu_benchmark.py --data_dir data/nthu_ddd_raw --checkpoint saved_models/low_light_sota/best_sota_model.pth
+```
+
+### 5. Real-Time Video / Webcam Inference with HUD
+
+```bash
+# Webcam
+python inference/realtime_stream.py --source 0
+
+# Video file
+python inference/realtime_stream.py --source path/to/night_drive.mp4 --checkpoint saved_models/low_light_sota/best_sota_model.pth
+```
+
+---
+
+## 📁 Repository Structure
+
+```
+├── configs/
+│   └── nthu_ddd_config.yaml       # Hyperparameters, paths, sequence length, alarm thresholds
+├── data/
+│   ├── nthu_dataset.py            # NTHU-DDD dataset loader, windowing, and synthetic fallback
+│   ├── optical_flow.py            # Dense Farneback optical flow & motion velocity extractor
+│   └── transforms.py              # Low-light photometric transforms & data augmentation
+├── models/
+│   ├── retinaface_detector.py     # RetinaFace wrapper and multi-RoI facial extractor
+│   ├── llformer.py                # LLFormer low-light enhancement transformer
+│   ├── region_vit.py              # Region-Aware ViT for Face/Eye/Mouth tokenization
+│   ├── flow_vit.py                # Optical Flow ViT for motion dynamic tokenization
+│   ├── cross_attention_fusion.py  # Cross-attention & Spatial/Channel attention fusion
+│   ├── temporal_transformer.py    # Temporal sequence modeling across video frames
+│   └── drowsiness_pipeline.py     # End-to-end orchestrated low-light detection pipeline
+├── evaluation/
+│   ├── metrics.py                 # Multi-class accuracy, F1, PERCLOS error & latency profiler
+│   └── nthu_benchmark.py          # NTHU-DDD subject-independent benchmarking script
+├── inference/
+│   ├── adaptive_alarm.py          # Multi-tier dynamic alerting & fatigue engine
+│   └── realtime_stream.py         # Real-time video stream runner with HUD overlay
+├── tests/
+│   └── test_pipeline.py           # Unit and integration test suite
+├── train_nthu.py                  # PyTorch mixed-precision training script
+├── requirements.txt               # Pinned dependencies
+└── README.md
 ```

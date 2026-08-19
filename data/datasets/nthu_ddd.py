@@ -9,7 +9,8 @@ from data.optical_flow import DenseOpticalFlowExtractor
 
 class NTHUDDDDataset(Dataset):
     """
-    NTHU Driver Drowsiness Detection (NTHU-DDD) Dataset.
+    NTHU Driver Drowsiness Detection (NTHU-DDD) Dataset Loader.
+    Strictly parses real uploaded video sequences from raw_dir.
     """
     CLASS_MAP = {
         "normal": 0, "normal_driving": 0,
@@ -19,10 +20,11 @@ class NTHUDDDDataset(Dataset):
         "eye_closure": 4, "sleep": 4, "drowsy": 4
     }
 
-    def __init__(self, root_dir: str, subjects: list = None, sequence_length: int = 16, is_train: bool = True):
+    def __init__(self, root_dir: str, subjects: list = None, sequence_length: int = 16, frame_step: int = 2, is_train: bool = True):
         self.root_dir = root_dir
         self.subjects = subjects or []
         self.sequence_length = sequence_length
+        self.frame_step = frame_step
         self.is_train = is_train
         self.transform = LowLightVideoAugmentation(is_train=is_train)
         self.flow_extractor = DenseOpticalFlowExtractor()
@@ -31,10 +33,10 @@ class NTHUDDDDataset(Dataset):
 
     def _index(self):
         if not os.path.exists(self.root_dir):
-            # Synthetic fallback for zero-dependency execution
-            for i in range(30 if self.is_train else 10):
-                self.samples.append({"type": "synthetic", "label": i % 5, "subject": f"subj_{i%5}"})
-            return
+            raise FileNotFoundError(
+                f"[DATASET ERROR] NTHU-DDD root directory '{self.root_dir}' was not found. "
+                f"Please upload/place the dataset into '{self.root_dir}' before starting training."
+            )
 
         for subj in os.listdir(self.root_dir):
             if self.subjects and subj not in self.subjects:
@@ -44,32 +46,64 @@ class NTHUDDDDataset(Dataset):
                 continue
             for root, _, files in os.walk(subj_path):
                 for f in files:
-                    if f.lower().endswith(('.mp4', '.avi')):
+                    if f.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
                         label = 0
                         for k, v in self.CLASS_MAP.items():
                             if k in f.lower():
                                 label = v
                                 break
-                        self.samples.append({"type": "video", "path": os.path.join(root, f), "label": label, "subject": subj})
+                        self.samples.append({
+                            "path": os.path.join(root, f),
+                            "label": label,
+                            "subject": subj
+                        })
+
+        if len(self.samples) == 0:
+            raise ValueError(
+                f"[DATASET ERROR] No valid video files (.mp4/.avi/.mov/.mkv) found in '{self.root_dir}'. "
+                f"Please verify your dataset files before running training."
+            )
 
     def __len__(self):
         return len(self.samples)
 
+    def _load_video_frames(self, video_path: str) -> list:
+        cap = cv2.VideoCapture(video_path)
+        raw_frames = []
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            raw_frames.append(frame)
+            if len(raw_frames) > 300: # Memory safeguard
+                break
+        cap.release()
+
+        if len(raw_frames) == 0:
+            return [np.zeros((224, 224, 3), dtype=np.uint8)] * self.sequence_length
+
+        stride = self.frame_step
+        total_len = len(raw_frames)
+        req_len = self.sequence_length * stride
+
+        if total_len >= req_len:
+            start_idx = np.random.randint(0, total_len - req_len + 1) if self.is_train else 0
+            selected = raw_frames[start_idx:start_idx + req_len:stride]
+        else:
+            indices = np.linspace(0, total_len - 1, self.sequence_length).astype(int)
+            selected = [raw_frames[idx] for idx in indices]
+
+        return selected
+
     def __getitem__(self, idx):
         s = self.samples[idx]
-        label = s["label"]
-        raw_frames = [np.zeros((224, 224, 3), dtype=np.uint8) for _ in range(self.sequence_length)]
-        
-        # Synthetic dynamic rendering if no video
-        for t in range(self.sequence_length):
-            cv2.circle(raw_frames[t], (112, 112), 50, (50, 50, 50), -1)
-
+        raw_frames = self._load_video_frames(s["path"])
         video_t = self.transform(raw_frames)
         flow_t = self.flow_extractor.extract_sequence_flow(raw_frames)
 
         return {
             "video": video_t,
             "flow": flow_t,
-            "label": torch.tensor(label, dtype=torch.long),
+            "label": torch.tensor(s["label"], dtype=torch.long),
             "subject": s.get("subject", "unknown")
         }

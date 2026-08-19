@@ -9,27 +9,29 @@ from models.drowsiness_pipeline import LowLightDrowsinessPipeline
 from data.transforms import LowLightVideoAugmentation
 from data.optical_flow import DenseOpticalFlowExtractor
 from inference.adaptive_alarm import AdaptiveAlarmSystem
+from xai.master_explainer import MasterXAIExplainer
 
 
 def run_realtime_inference(
     video_source=0,
     checkpoint_path=None,
     device="cuda" if torch.cuda.is_available() else "cpu",
-    seq_len=16
+    seq_len=16,
+    show_xai_dashboard=True
 ):
-    print(f"[INFO] Initializing SOTA Low-Light Drowsiness Detection Pipeline on {device}...")
+    print(f"[INFO] Initializing SOTA Low-Light Drowsiness Detection + XAI Pipeline on {device}...")
     
-    # Instantiate pipeline model
     model = LowLightDrowsinessPipeline(num_classes=5, sequence_length=seq_len).to(device)
     if checkpoint_path and torch.os.path.exists(checkpoint_path):
         print(f"[INFO] Loading trained weights from {checkpoint_path}")
         model.load_state_dict(torch.load(checkpoint_path, map_location=device))
     model.eval()
 
-    # Preprocessing & Flow extractors
+    # Preprocessing, flow, alarm & XAI modules
     transform = LowLightVideoAugmentation(is_train=False, target_size=(224, 224))
     flow_extractor = DenseOpticalFlowExtractor(target_size=(112, 112))
     alarm_system = AdaptiveAlarmSystem()
+    xai_engine = MasterXAIExplainer(model)
 
     cap = cv2.VideoCapture(video_source)
     if not cap.isOpened():
@@ -43,7 +45,9 @@ def run_realtime_inference(
 
     CLASS_NAMES = ["Normal", "Slow Blinking", "Yawning", "Nodding", "Eye Closure"]
 
-    print("[INFO] Starting real-time stream. Press 'q' to exit.")
+    print("[INFO] Starting real-time stream with XAI HUD. Press 'x' to toggle XAI view, 'q' to exit.")
+
+    xai_composite = None
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -71,8 +75,8 @@ def run_realtime_inference(
         # Run inference once buffer is filled
         if len(frame_buffer) == seq_len:
             buffer_list = list(frame_buffer)
-            video_tensor = transform(buffer_list).unsqueeze(0).to(device) # (1, T, 3, H, W)
-            flow_tensor = flow_extractor.extract_sequence_flow(buffer_list).unsqueeze(0).to(device) # (1, T, 2, H, W)
+            video_tensor = transform(buffer_list).unsqueeze(0).to(device)
+            flow_tensor = flow_extractor.extract_sequence_flow(buffer_list).unsqueeze(0).to(device)
 
             with torch.no_grad():
                 out = model(video_tensor, flow_tensor)
@@ -82,34 +86,54 @@ def run_realtime_inference(
 
             alarm_data = alarm_system.update(fatigue_score, pred_class, fps=fps)
 
-        # Render HUD Overlay
-        display_frame = frame.copy()
+            # Generate XAI visual explanation periodically or during alerts
+            if show_xai_dashboard and (frame_count % 6 == 0 or alarm_data["alarm_level"] >= 1):
+                try:
+                    explanation = xai_engine.generate_full_explanation(
+                        video_tensor,
+                        flow_tensor,
+                        raw_last_frame_bgr=frame,
+                        target_class=pred_class
+                    )
+                    xai_composite = explanation["composite_image"]
+                except Exception:
+                    pass
+
+        # Decide display frame
+        if show_xai_dashboard and xai_composite is not None:
+            display_frame = xai_composite.copy()
+            cur_w = display_frame.shape[1]
+        else:
+            display_frame = frame.copy()
+            cur_w = w_orig
+
         hud_color = alarm_data["hud_color"]
 
         # Top Banner
-        cv2.rectangle(display_frame, (0, 0), (w_orig, 70), (20, 20, 20), -1)
-        cv2.putText(display_frame, f"STATUS: {alarm_data['status_text']}", (20, 35),
-                    cv2.FONT_HERSHEY_DUPLEX, 0.9, hud_color, 2)
-        cv2.putText(display_frame, f"CLASS: {CLASS_NAMES[alarm_data['predicted_class']]}", (20, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+        cv2.rectangle(display_frame, (0, 0), (cur_w, 65), (20, 20, 20), -1)
+        cv2.putText(display_frame, f"STATUS: {alarm_data['status_text']}", (20, 30),
+                    cv2.FONT_HERSHEY_DUPLEX, 0.8, hud_color, 2)
+        cv2.putText(display_frame, f"CLASS: {CLASS_NAMES[alarm_data['predicted_class']]}", (20, 52),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
 
-        # Fatigue Gauge & PERCLOS
+        # Fatigue & PERCLOS HUD
         score = alarm_data["smoothed_fatigue_score"]
-        gauge_w = int(200 * score)
-        cv2.rectangle(display_frame, (w_orig - 240, 15), (w_orig - 20, 35), (60, 60, 60), 1)
-        cv2.rectangle(display_frame, (w_orig - 240, 15), (w_orig - 240 + gauge_w, 35), hud_color, -1)
-        cv2.putText(display_frame, f"Fatigue: {score*100:.1f}%", (w_orig - 240, 55),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1)
-        cv2.putText(display_frame, f"PERCLOS: {alarm_data['perclos']*100:.1f}% | FPS: {fps:.1f}", (w_orig - 240, 68),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 180), 1)
+        gauge_w = int(180 * score)
+        cv2.rectangle(display_frame, (cur_w - 220, 12), (cur_w - 20, 30), (60, 60, 60), 1)
+        cv2.rectangle(display_frame, (cur_w - 220, 12), (cur_w - 220 + gauge_w, 30), hud_color, -1)
+        cv2.putText(display_frame, f"Fatigue: {score*100:.1f}% | PERCLOS: {alarm_data['perclos']*100:.1f}%",
+                    (cur_w - 220, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (220, 220, 220), 1)
 
-        # Red Border Warning for Level 3
+        # Red Border Alert for Level 3
         if alarm_data["alarm_level"] == 3:
-            cv2.rectangle(display_frame, (0, 0), (w_orig, h_orig), (0, 0, 255), 8)
+            cv2.rectangle(display_frame, (0, 0), (cur_w, display_frame.shape[0]), (0, 0, 255), 8)
 
-        cv2.imshow("Low-Light Driver Drowsiness Monitor", display_frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        cv2.imshow("Low-Light Driver Drowsiness + Explainability Monitor", display_frame)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
             break
+        elif key == ord('x'):
+            show_xai_dashboard = not show_xai_dashboard
 
     cap.release()
     cv2.destroyAllWindows()
@@ -119,7 +143,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default="0", help="Camera index or video filepath")
     parser.add_argument("--checkpoint", default=None, help="Trained model checkpoint path")
+    parser.add_argument("--no-xai", action="store_true", help="Disable XAI dashboard view")
     args = parser.parse_args()
 
     src = int(args.source) if args.source.isdigit() else args.source
-    run_realtime_inference(video_source=src, checkpoint_path=args.checkpoint)
+    run_realtime_inference(
+        video_source=src,
+        checkpoint_path=args.checkpoint,
+        show_xai_dashboard=not args.no_xai
+    )

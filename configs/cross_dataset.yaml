@@ -1,0 +1,9 @@
+train_dataset: "NTHU-DDD"
+eval_datasets:
+  - "YawDD"
+  - "MRL-Eye"
+
+sequence_length: 16
+image_size: [224, 224]
+checkpoint: "saved_models/nthu_ddd/best_model.pth"
+output_dir: "results/cross_dataset"

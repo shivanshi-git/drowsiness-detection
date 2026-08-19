@@ -1,0 +1,21 @@
+dataset:
+  name: "NTHU-DDD"
+  raw_dir: "data/raw/nthu_ddd"
+  sequence_length: 16
+  frame_step: 2
+  image_size: [224, 224]
+  num_classes: 5
+  class_names: ["Normal", "Slow Blinking", "Yawning", "Nodding", "Eye Closure"]
+
+model:
+  embed_dim: 256
+  depth: 4
+  num_heads: 8
+  enable_llformer: true
+
+training:
+  batch_size: 8
+  epochs: 50
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  checkpoint_dir: "saved_models/nthu_ddd"

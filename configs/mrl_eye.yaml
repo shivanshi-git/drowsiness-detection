@@ -1,0 +1,17 @@
+dataset:
+  name: "MRL-Eye"
+  raw_dir: "data/raw/mrl_eye"
+  image_size: [64, 64]
+  num_classes: 2
+  class_names: ["Closed", "Open"]
+
+model:
+  embed_dim: 128
+  depth: 3
+  num_heads: 4
+
+training:
+  batch_size: 64
+  epochs: 30
+  lr: 2.0e-4
+  checkpoint_dir: "saved_models/mrl_eye"

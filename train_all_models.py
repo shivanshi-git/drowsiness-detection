@@ -4,23 +4,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from train import train_model
 
-MODELS = [
-    'custom_cnn',
-    'vgg16',
-    'vgg19',
-    'resnet18',
-    'resnet50',
-    'mobilenet_v2',
-    'mobilenet_v3',
-    'efficientnet_b0',
-    'vit_tiny'
-]
+MODELS = ['resnet18']
 
 def train_and_compare_all_models(dataset_dir='processed_dataset', epochs=5, batch_size=32, lr=1e-4, device='cuda'):
     """
-    Sequentially trains all candidate deep learning models on the unified dataset,
-    saves individual evaluation matrices, heatmaps, and checkpoints for each,
-    and constructs a overall comparative performance leaderboard.
+    Trains the canonical ResNet18 model and saves its evaluation artifacts.
     """
     overall_results = {}
     results_base_dir = "results"

@@ -1,5 +1,7 @@
 # Drowsiness Detection Dataset Overview
 
+> **Status:** The counts below are a historical dataset snapshot, not a guarantee produced by the current default run. Rebuild the dataset and run `audit_leakage.py` before using these numbers in a report. The current repository does not include the raw archives or `processed_dataset/`.
+
 This document provides a detailed breakdown of the datasets utilized in the Driver Drowsiness Detection project. The project utilizes a massive raw dataset pipeline which is unified, preprocessed, and distilled into a highly efficient and balanced training dataset.
 
 ## 1. Raw Datasets (The Archives)

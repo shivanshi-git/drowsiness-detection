@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-import cv2
 
 class XAIEvaluator:
     """
@@ -98,10 +97,10 @@ class XAIEvaluator:
         auc = float(np.trapz(probabilities, dx=1.0 / steps))
         return auc
 
-def run_quantitative_xai_audit(model, dataloader, grad_cam_obj, device='cpu', max_samples=50):
+def run_quantitative_xai_audit(model, dataloader, grad_cam_obj, device='cpu', max_samples=50, landmark_mask_provider=None):
     """
-    Runs a quantitative XAI audit across validation samples and computes mean Pointing Game Accuracy,
-    Deletion AUC, and Insertion AUC.
+    Runs a quantitative XAI audit across validation samples and computes deletion and insertion AUC.
+    Pointing Game Accuracy is computed only when landmark_mask_provider supplies real annotation masks.
     """
     model.eval()
     pointing_hits = []
@@ -121,29 +120,29 @@ def run_quantitative_xai_audit(model, dataloader, grad_cam_obj, device='cpu', ma
             img_tensor = inputs[i:i+1]
             heatmap, pred_idx, conf = grad_cam_obj.generate_heatmap(img_tensor)
 
-            # Generate synthetic center eye landmark mask for audit verification if raw mask omitted
-            h, w = heatmap.shape
-            landmark_mask = np.zeros((h, w), dtype=np.uint8)
-            cv2.ellipse(landmark_mask, (w // 2, h // 2), (w // 4, h // 6), 0, 0, 360, 255, -1)
+            landmark_mask = None
+            if landmark_mask_provider is not None:
+                landmark_mask = landmark_mask_provider(img_tensor, i, targets[i].item(), heatmap.shape)
 
-            hit = XAIEvaluator.pointing_game_hit(heatmap, landmark_mask)
+            if landmark_mask is not None:
+                pointing_hits.append(XAIEvaluator.pointing_game_hit(heatmap, landmark_mask))
             del_auc = XAIEvaluator.deletion_auc(model, img_tensor, heatmap, pred_idx, device=device)
             ins_auc = XAIEvaluator.insertion_auc(model, img_tensor, heatmap, pred_idx, device=device)
 
-            pointing_hits.append(hit)
             deletion_aucs.append(del_auc)
             insertion_aucs.append(ins_auc)
 
             count += 1
 
-    mean_pointing_acc = float(np.mean(pointing_hits)) * 100 if pointing_hits else 0.0
+    mean_pointing_acc = float(np.mean(pointing_hits)) * 100 if pointing_hits else None
     mean_del_auc = float(np.mean(deletion_aucs)) if deletion_aucs else 0.0
     mean_ins_auc = float(np.mean(insertion_aucs)) if insertion_aucs else 0.0
 
     print(f"\n======================================================================")
     print(f" 🧠 QUANTITATIVE XAI EVALUATION METRICS REPORT")
     print(f"======================================================================")
-    print(f"  • Pointing Game Hit Rate (Landmark Peak Accuracy): {mean_pointing_acc:.2f}%")
+    pointing_text = f"{mean_pointing_acc:.2f}%" if mean_pointing_acc is not None else "NOT EVALUATED (no landmark masks)"
+    print(f"  • Pointing Game Hit Rate (Landmark Peak Accuracy): {pointing_text}")
     print(f"  • Deletion AUC (Lower = Better Attribution):       {mean_del_auc:.4f}")
     print(f"  • Insertion AUC (Higher = Better Attribution):     {mean_ins_auc:.4f}")
     print(f"======================================================================\n")

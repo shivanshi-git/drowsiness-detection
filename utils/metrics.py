@@ -1,7 +1,29 @@
 import time
 import torch
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score, confusion_matrix
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, precision_recall_fscore_support, roc_auc_score, confusion_matrix
+
+
+def _expected_calibration_error(targets, probabilities, bins=10):
+    targets = np.asarray(targets)
+    probabilities = np.asarray(probabilities)
+    ece = 0.0
+    for lower, upper in zip(np.linspace(0.0, 1.0, bins, endpoint=False), np.linspace(0.0, 1.0, bins + 1)[1:]):
+        mask = (probabilities >= lower) & (probabilities < upper if upper < 1.0 else probabilities <= upper)
+        if np.any(mask):
+            ece += mask.mean() * abs(probabilities[mask].mean() - targets[mask].mean())
+    return float(ece)
+
+
+def _best_f1_threshold(targets, probabilities):
+    thresholds = np.linspace(0.05, 0.95, 19)
+    scores = []
+    for threshold in thresholds:
+        predictions = (np.asarray(probabilities) >= threshold).astype(int)
+        _, _, f1, _ = precision_recall_fscore_support(targets, predictions, average='binary', zero_division=0)
+        scores.append(f1)
+    best_index = int(np.argmax(scores))
+    return float(thresholds[best_index]), float(scores[best_index])
 
 def evaluate_model_performance(model, dataloader, device='cpu'):
     """
@@ -51,13 +73,21 @@ def evaluate_model_performance(model, dataloader, device='cpu'):
     else:
         specificity = 0.0
 
+    best_threshold, threshold_f1 = _best_f1_threshold(all_targets, all_probs)
+    brier_score = float(np.mean((np.asarray(all_probs) - np.asarray(all_targets)) ** 2))
+
     return {
         'accuracy': acc,
         'precision': prec,
         'recall': rec,
         'specificity': specificity,
         'f1_score': f1,
+        'balanced_accuracy': balanced_accuracy_score(all_targets, all_preds),
         'roc_auc': auc,
+        'brier_score': brier_score,
+        'expected_calibration_error': _expected_calibration_error(all_targets, all_probs),
+        'best_f1_threshold': best_threshold,
+        'best_threshold_f1': threshold_f1,
         'confusion_matrix': cm,
         'all_targets': all_targets,
         'all_preds': all_preds,
@@ -66,7 +96,7 @@ def evaluate_model_performance(model, dataloader, device='cpu'):
         'latency_ms': latency_ms
     }
 
-def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'], output_dir='results'):
+def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'], output_dir='results', metadata=None):
     """
     Saves complete evaluation matrix:
     - Confusion Matrix (PNG)
@@ -165,13 +195,19 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
         'recall': float(metrics['recall']),
         'specificity': float(metrics.get('specificity', 0.0)),
         'f1_score': float(metrics['f1_score']),
+        'balanced_accuracy': float(metrics.get('balanced_accuracy', 0.0)),
         'roc_auc': float(metrics['roc_auc']),
+        'brier_score': float(metrics.get('brier_score', 0.0)),
+        'expected_calibration_error': float(metrics.get('expected_calibration_error', 0.0)),
+        'best_f1_threshold': float(metrics.get('best_f1_threshold', 0.5)),
         'fps': float(metrics['fps']),
         'latency_ms': float(metrics['latency_ms']),
         'confusion_matrix': cm.tolist(),
         'class_names': class_names,
         'epoch_history': epoch_details
     }
+    if metadata:
+        summary_dict['metadata'] = metadata
 
     json_path = os.path.join(output_dir, 'evaluation_summary.json')
     with open(json_path, 'w') as f:
@@ -182,12 +218,20 @@ def save_evaluation_matrix(metrics, history=None, class_names=['alert', 'drowsy'
         f.write("==================================================\n")
         f.write("         MODEL EVALUATION MATRIX REPORT           \n")
         f.write("==================================================\n\n")
+        if metadata:
+            for key, value in metadata.items():
+                f.write(f"{key.replace('_', ' ').title()}: {value}\n")
+            f.write("\n")
         f.write(f"Overall Accuracy:  {metrics['accuracy']*100:.2f}%\n")
         f.write(f"Precision:         {metrics['precision']:.4f}\n")
         f.write(f"Recall:            {metrics['recall']:.4f}\n")
         f.write(f"Specificity:       {metrics.get('specificity', 0.0):.4f}\n")
         f.write(f"F1-Score:          {metrics['f1_score']:.4f}\n")
+        f.write(f"Balanced Accuracy: {metrics.get('balanced_accuracy', 0.0):.4f}\n")
         f.write(f"ROC-AUC:           {metrics['roc_auc']:.4f}\n")
+        f.write(f"Brier Score:       {metrics.get('brier_score', 0.0):.4f}\n")
+        f.write(f"Calibration Error:  {metrics.get('expected_calibration_error', 0.0):.4f}\n")
+        f.write(f"Best F1 Threshold:  {metrics.get('best_f1_threshold', 0.5):.2f}\n")
         f.write(f"Inference Latency: {metrics['latency_ms']:.2f} ms/sample\n")
         f.write(f"FPS Throughput:    {metrics['fps']:.1f} FPS\n\n")
         if epoch_details:

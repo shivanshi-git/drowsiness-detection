@@ -10,11 +10,11 @@ class FocalLoss(nn.Module):
         FL(p_t) = -alpha_t * (1 - p_t)^gamma * log(p_t)
         
     Parameters:
-        alpha (float or torch.Tensor): Weighting factor for positive/negative class (default 0.25).
+        alpha (float or torch.Tensor): Weighting factor for the positive class (default 0.5).
         gamma (float): Focusing parameter for hard samples (default 2.0).
         reduction (str): 'mean', 'sum', or 'none'.
     """
-    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+    def __init__(self, alpha=0.5, gamma=2.0, reduction='mean'):
         super(FocalLoss, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
@@ -25,9 +25,10 @@ class FocalLoss(nn.Module):
         pt = torch.exp(-ce_loss)
         
         if isinstance(self.alpha, (float, int)):
-            alpha_t = self.alpha
-        elif isinstance(self.alpha, (list, torch.Tensor)):
-            alpha_t = torch.tensor(self.alpha, device=inputs.device)[targets]
+            alpha_t = torch.where(targets == 1, self.alpha, 1.0 - self.alpha)
+        elif isinstance(self.alpha, (list, tuple, torch.Tensor)):
+            alpha_values = torch.as_tensor(self.alpha, device=inputs.device, dtype=inputs.dtype)
+            alpha_t = alpha_values[targets]
         else:
             alpha_t = 1.0
 

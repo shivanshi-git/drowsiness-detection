@@ -18,7 +18,7 @@ def run_ablation_matrix(epochs=25, batch_size=64, device="cuda"):
       - Exp B:    Dual-Branch ResNet (Cross-Entropy)
       - Exp C:    Focal Loss + Augmentations (Phase 1)
       - Exp D:    Dual-Branch Feature Fusion + Focal Loss (Phase 2)
-      - Exp E:    Dual-Branch + Temporal GRU Sequence Model (Phase 3)
+    - Temporal sequence training is intentionally excluded until a sequence dataset is available.
     """
     if device == 'cuda' and not torch.cuda.is_available():
         print("[!] Warning: CUDA requested but PyTorch cannot access GPU. Falling back to CPU.")
@@ -51,7 +51,6 @@ def run_ablation_matrix(epochs=25, batch_size=64, device="cuda"):
         {"name": "Exp_B_DualBranch", "model": "dual_branch_resnet18", "loss": "cross_entropy"},
         {"name": "Exp_C_Phase1", "model": "resnet18", "loss": "focal"},
         {"name": "Exp_D_Phase2", "model": "dual_branch_resnet18", "loss": "focal"},
-        {"name": "Exp_E_Phase3", "model": "temporal_resnet18", "loss": "focal"},
     ]
 
     results_table = []

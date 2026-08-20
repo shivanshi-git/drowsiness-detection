@@ -1,6 +1,6 @@
 # Driver Drowsiness Detection System with Explainable AI (XAI)
 
-A comprehensive Deep Learning framework for real-time **Driver Drowsiness Detection**, featuring **12 candidate model architectures** (VGG16, ResNet, MobileNet, EfficientNet, ViT, Custom CNN) integrated with **Grad-CAM Explainable AI** and an interactive **Streamlit Dashboard**.
+A research prototype for **Driver Drowsiness Detection** using a canonical ResNet18 image model, Grad-CAM visualizations, PERCLOS temporal buffering, and an interactive Streamlit dashboard. The project is not yet a validated safety-critical deployment.
 
 ---
 
@@ -21,11 +21,11 @@ A comprehensive Deep Learning framework for real-time **Driver Drowsiness Detect
 | :--- | :--- |
 | `app.py` | Streamlit interactive web dashboard for real-time predictions and model comparison. |
 | `train.py` | Core training script to train and fine-tune individual models (saves evaluation metrics, graphs, and models). |
-| `train_all_models.py` | Script to sequentially train all candidate models and generate a comparative leaderboard. |
+| `train_all_models.py` | Reproducible ResNet18 training entry point. |
 | `predict.py` | Inference script to predict drowsiness on a single image and generate Grad-CAM heatmaps. |
 | `data/preprocess_mixed_data.py` | Unified dataset preprocessor. Merges images/videos from multiple archives into a balanced structure. |
 | `data/dataset_loader.py` | PyTorch `Dataset` and `DataLoader` setup with data augmentation (Albumentations/Torchvision). |
-| `models/model_factory.py` | Contains the definitions and factory functions for all candidate architectures. |
+| `models/model_factory.py` | Creates the active ResNet18 model and retains legacy experimental constructors. |
 | `models/custom_cnn.py` | Defines the specific lightweight Custom CNN architecture designed for fast inference. |
 | `utils/metrics.py` | Helper functions for calculating evaluation matrices, ROC curves, and logging training results. |
 | `utils/face_mesh.py` | Hybrid geometric metrics implementation (e.g., EAR, MAR calculation using MediaPipe). |
@@ -56,9 +56,7 @@ graph TD
 
 | Model Architecture | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Latency (ms) | FPS |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Custom CNN** | *Training...* | - | - | - | - | - | - |
-| **MobileNetV2** | *Pending...* | - | - | - | - | - | - |
-| **ResNet50** | *Pending...* | - | - | - | - | - | - |
+| **ResNet18** | *Train with the command below* | - | - | - | - | - | - |
 
 *(All evaluation graphs, confusion matrices, and ROC curves are automatically saved in the `results/` directory after each training run).*
 
@@ -68,8 +66,8 @@ graph TD
 
 ### 1. Install Dependencies
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+.venv\\Scripts\\activate
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
@@ -80,16 +78,24 @@ Place raw data in `archive/`, `archive(1)/`, etc., and run the preprocessor:
 python data/preprocess_mixed_data.py
 ```
 
-### 3. Fine-Tune a Model (e.g., Custom CNN for 25 Epochs)
+### 3. Fine-Tune the Canonical ResNet18 Model
 ```bash
 python train.py --model custom_cnn --dataset_dir processed_dataset --epochs 25 --batch_size 32
 ```
-*Make sure to check the accuracy before proceeding to the next model!*
+Training checkpoints are written to `saved_models/`; the dashboard loads the best matching checkpoint from that directory.
+For balanced classes, the training default uses `--focal_alpha 0.5`; tune it only on the validation split, never on the held-out test split.
+
+Before calling a model production-ready, run the fail-closed evidence check:
+```bash
+python validate_production_readiness.py --model custom_cnn
+```
+It requires train/validation/test splits, a best checkpoint, and a held-out-test report with calibration metrics.
 
 ### 4. Single Image Prediction & XAI
 ```bash
 python predict.py --image path/to/image.jpg --model custom_cnn --out output_xai.jpg
 ```
+Pass a trained checkpoint explicitly with `--checkpoint saved_models/custom_cnn_best_model.pth`.
 
 ### 5. Launch Interactive Dashboard
 ```bash

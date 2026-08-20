@@ -14,7 +14,7 @@ from xai.grad_cam import GradCAM
 from xai.visualizer import overlay_heatmap, plot_xai_comparison
 import numpy as np
 
-def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs=10, batch_size=32, lr=None, device='cuda', loss_type='focal'):
+def train_model(model_name='resnet18', dataset_dir='processed_dataset', epochs=15, batch_size=32, lr=None, device='cuda', loss_type='focal', focal_alpha=0.5):
     """
     Main training and validation loop for Driver Drowsiness Detection.
     Applies paradigm-specific optimization protocols (AdamW, weight decay, learning rates) automatically.
@@ -29,6 +29,14 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
         device = torch.device('cuda')
     else:
         device = torch.device(device)
+
+    if model_name.startswith('temporal_'):
+        raise ValueError(
+            "Temporal models require a sequence dataset with shape "
+            "(batch, sequence, channels, height, width); the current ImageFolder "
+            "pipeline provides single images and cannot train this model honestly."
+        )
+
     print(f"[*] Training Model: '{model_name}' on Device: {device}")
 
     # Auto-route Dual-Branch & Temporal models to processed_dual_dataset if available
@@ -38,7 +46,11 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
             print(f"[*] Dual-ROI Model detected: Automatically using Dual-ROI dataset from '{dataset_dir}' (256x128 resolution)")
 
     # Create DataLoaders
-    train_loader, val_loader, class_names = create_dataloaders(dataset_dir=dataset_dir, batch_size=batch_size)
+    train_loader, val_loader, test_loader, class_names = create_dataloaders(
+        dataset_dir=dataset_dir,
+        batch_size=batch_size,
+        include_test=True,
+    )
 
     # Instantiate Model, Target Layer, and Paradigm-Specific Optimization Config
     model, target_layer, config = get_model_and_config(model_name=model_name, num_classes=len(class_names), pretrained=True)
@@ -51,7 +63,7 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
     print(f"[*] Trainable Parameters: {count_parameters(model):.2f} Million")
 
     if loss_type.lower() == 'focal':
-        criterion = FocalLoss(alpha=0.25, gamma=2.0)
+        criterion = FocalLoss(alpha=focal_alpha, gamma=2.0)
     else:
         criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = optim.AdamW(model.parameters(), lr=effective_lr, weight_decay=weight_decay)
@@ -156,10 +168,27 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
             }, best_checkpoint_path)
             print(f"  [✓] Saved Best Model Checkpoint (Val F1: {best_val_f1:.4f}) to: {best_checkpoint_path}")
 
-    # Final Evaluation & Evaluation Matrix Artifact Generation
+    # Evaluate the best validation checkpoint, never the final overfit epoch.
+    best_checkpoint_path = os.path.join(checkpoint_dir, f"{model_name}_best_model.pth")
+    if not os.path.exists(best_checkpoint_path):
+        raise RuntimeError(f"Best checkpoint was not created: {best_checkpoint_path}")
+    best_checkpoint = torch.load(best_checkpoint_path, map_location=device)
+    model.load_state_dict(best_checkpoint['model_state_dict'])
+
+    # Final held-out test evaluation & evaluation matrix artifact generation
     print(f"\n[*] Computing Final Evaluation Matrix and Generating Artifacts for '{model_name}'...")
-    final_val_metrics = evaluate_model_performance(model, val_loader, device=device)
-    summary_dict = save_evaluation_matrix(final_val_metrics, history=history, class_names=class_names, output_dir=model_results_dir)
+    final_test_metrics = evaluate_model_performance(model, test_loader, device=device)
+    summary_dict = save_evaluation_matrix(
+        final_test_metrics,
+        history=history,
+        class_names=class_names,
+        output_dir=model_results_dir,
+        metadata={
+            'evaluation_split': 'held_out_test',
+            'best_checkpoint': best_checkpoint_path,
+            'best_validation_f1': float(best_checkpoint.get('val_f1', 0.0)),
+        },
+    )
 
     # Generate 5 XAI Verification Heatmaps per model
     print(f"\n[*] Generating 5 Grad-CAM Heatmaps for '{model_name}'...")
@@ -202,16 +231,17 @@ def train_model(model_name='custom_cnn', dataset_dir='processed_dataset', epochs
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train Drowsiness Detection Deep Learning Models with XAI.")
-    parser.add_argument("--model", type=str, default="resnet18", choices=['custom_cnn', 'vgg16', 'vgg19', 'resnet18', 'resnet50', 'dual_branch_resnet18', 'temporal_resnet18', 'temporal_resnet50', 'mobilenet_v2', 'mobilenet_v3', 'efficientnet_b0', 'vit_tiny'])
+    parser.add_argument("--model", type=str, default="resnet18", choices=['resnet18'])
     parser.add_argument("--dataset_dir", type=str, default="processed_dataset")
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--loss", type=str, default="focal", choices=['focal', 'cross_entropy'])
     parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--focal_alpha", type=float, default=0.5, help="Positive/drowsy focal-loss weight; use 0.5 for balanced data.")
 
     args = parser.parse_args()
     if os.path.exists(args.dataset_dir):
-        train_model(model_name=args.model, dataset_dir=args.dataset_dir, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, device=args.device, loss_type=args.loss)
+        train_model(model_name=args.model, dataset_dir=args.dataset_dir, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, device=args.device, loss_type=args.loss, focal_alpha=args.focal_alpha)
     else:
         print(f"[!] Dataset directory '{args.dataset_dir}' not found. Please run 'python data/preprocess_mixed_data.py --raw_dir <your_raw_folder>' first.")

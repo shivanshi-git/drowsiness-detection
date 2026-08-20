@@ -1,0 +1,9 @@
+[server]
+# Disable module file watcher to prevent PyTorch torch.classes.__path__ RuntimeError
+fileWatcherType = "none"
+headless = true
+port = 8501
+
+[global]
+developmentMode = false
+showWarningOnDirectExecution = false

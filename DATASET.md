@@ -103,3 +103,5 @@ During training, two distinct `.pth` checkpoint files are maintained under `save
 | :--- | :--- | :--- |
 | **`<model_name>_drowsiness_model.pth`** | End of **Every Epoch** | Saves current epoch, optimizer state, and loss history so training can be **paused and resumed seamlessly**. |
 | **`<model_name>_best_model.pth`** | Only on **New Highest Record Val F1-Score** | Guarantees that the **highest-performing model weights** on unseen validation drivers are preserved for real-time deployment (`app.py` & `predict.py`). |
+
+

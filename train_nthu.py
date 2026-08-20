@@ -283,19 +283,19 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epoch
         train_loss = running_loss / max(1, len(train_loader.dataset))
         train_metrics = compute_comprehensive_metrics(train_targets, train_preds)
 
-        # Validation Phase
-        model.eval()
+        # Validation Phase — use EMA model for stable evaluation
+        ema_model.eval()
         val_loss = 0.0
         val_preds, val_targets, val_probs = [], [], []
 
         with torch.no_grad():
             for batch in val_loader:
-                video = batch["video"].to(device)
-                flow = batch["flow"].to(device)
+                video  = batch["video"].to(device)
+                flow   = batch["flow"].to(device)
                 labels = batch["label"].to(device)
 
-                with autocast(enabled=train_cfg["mixed_precision"]):
-                    out = model(video, flow)
+                with autocast(enabled=use_amp):
+                    out  = ema_model(video, flow)
                     loss = criterion(out["logits"], labels)
 
                 val_loss += loss.item() * video.size(0)
@@ -306,14 +306,17 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epoch
                 val_targets.extend(labels.cpu().numpy().tolist())
                 val_probs.extend(probs.tolist())
 
-        val_loss = val_loss / max(1, len(val_loader.dataset))
+        val_loss    = val_loss / max(1, len(val_loader.dataset))
         val_metrics = compute_comprehensive_metrics(val_targets, val_preds, val_probs)
-        epoch_time = time.time() - t0
+        val_acc     = val_metrics["accuracy"]
+        val_f1      = val_metrics["macro_f1"]
+        cur_lr      = optimizer.param_groups[1]["lr"]
+        epoch_time  = time.time() - t0
 
         print(
-            f"Epoch [{epoch:02d}/{num_epochs:02d}] ({epoch_time:.1f}s) | "
+            f"Epoch [{epoch:02d}/{num_epochs:02d}] ({epoch_time:.1f}s) LR={cur_lr:.2e} | "
             f"Train Loss: {train_loss:.4f}, Train F1: {train_metrics['macro_f1']*100:.1f}% | "
-            f"Val Loss: {val_loss:.4f}, Val Acc: {val_metrics['accuracy']*100:.1f}%, Val F1: {val_metrics['macro_f1']*100:.1f}%"
+            f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc*100:.1f}%, Val F1: {val_f1*100:.1f}%"
         )
 
         history.append({
@@ -321,28 +324,38 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epoch
             "train_loss": train_loss,
             "train_macro_f1": train_metrics["macro_f1"],
             "val_loss": val_loss,
-            "val_accuracy": val_metrics["accuracy"],
-            "val_macro_f1": val_metrics["macro_f1"]
+            "val_accuracy": val_acc,
+            "val_macro_f1": val_f1
         })
 
-        # Save Resumable Latest Checkpoint
-        latest_state = {
-            "epoch": epoch,
-            "model_state": model.state_dict(),
+        # Save resumable latest checkpoint (includes EMA + early stop state)
+        torch.save({
+            "epoch":           epoch,
+            "model_state":     model.state_dict(),
+            "ema_state":       ema_model.state_dict(),
             "optimizer_state": optimizer.state_dict(),
             "scheduler_state": scheduler.state_dict(),
-            "scaler_state": scaler.state_dict(),
-            "best_val_f1": best_val_f1,
-            "history": history
-        }
-        torch.save(latest_state, latest_ckpt_path)
+            "scaler_state":    scaler.state_dict(),
+            "best_val_acc":    best_val_acc,
+            "best_val_f1":     best_val_f1,
+            "global_step":     global_step,
+            "no_improve":      no_improve,
+            "history":         history
+        }, latest_ckpt_path)
 
-        # Save Best Model Checkpoint
-        if val_metrics["macro_f1"] >= best_val_f1:
-            best_val_f1 = val_metrics["macro_f1"]
+        # Save best model (by accuracy) — save EMA weights
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            best_val_f1  = val_f1
+            no_improve   = 0
             best_path = os.path.join(save_dir, "best_sota_model.pth")
-            torch.save(model.state_dict(), best_path)
-            print(f"  [+] Saved new best model checkpoint -> {best_path} (Val F1: {best_val_f1*100:.2f}%)")
+            torch.save(ema_model.state_dict(), best_path)
+            print(f"  ✅ New best! Val Acc={best_val_acc*100:.2f}%  Val F1={best_val_f1*100:.2f}%  → {best_path}")
+        else:
+            no_improve += 1
+            if no_improve >= patience:
+                print(f"\n[EARLY STOP] No improvement for {patience} epochs. Stopping at epoch {epoch}.")
+                break
 
     # Save training history & plots
     pd.DataFrame(history).to_csv(os.path.join(save_dir, "training_history.csv"), index=False)

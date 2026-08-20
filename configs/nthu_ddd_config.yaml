@@ -4,7 +4,7 @@
 
 dataset:
   name: "NTHU-DDD"
-  raw_dir: "data/nthu_ddd_raw"
+  raw_dir: "archive(2)/NTHU DDD"
   processed_dir: "data/nthu_ddd_processed"
   sequence_length: 16       # Number of consecutive temporal frames per sample
   frame_step: 2             # Frame sub-sampling step

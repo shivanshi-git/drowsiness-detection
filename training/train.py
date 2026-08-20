@@ -20,8 +20,10 @@ def main():
 
     # Dataset & Loader
     data_cfg = cfg["dataset"]
-    train_ds = NTHUDDDDataset(root_dir=data_cfg.get("raw_dir", ""), is_train=True)
-    val_ds = NTHUDDDDataset(root_dir=data_cfg.get("raw_dir", ""), is_train=False)
+    seq_len = data_cfg.get("sequence_length", 16)
+    frame_step = data_cfg.get("frame_step", 2)
+    train_ds = NTHUDDDDataset(root_dir=data_cfg.get("raw_dir", ""), sequence_length=seq_len, frame_step=frame_step, is_train=True)
+    val_ds = NTHUDDDDataset(root_dir=data_cfg.get("raw_dir", ""), sequence_length=seq_len, frame_step=frame_step, is_train=False)
 
     batch_size = cfg["training"].get("batch_size", 8)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
@@ -30,7 +32,8 @@ def main():
     # Model
     model = LowLightDrowsinessPipeline(
         num_classes=data_cfg.get("num_classes", 5),
-        embed_dim=cfg["model"].get("embed_dim", 256)
+        embed_dim=cfg["model"].get("embed_dim", 256),
+        sequence_length=seq_len
     )
 
     trainer = PipelineTrainer(model, train_loader, val_loader, cfg["training"], device=device)

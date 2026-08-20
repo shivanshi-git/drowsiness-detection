@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import torch
 from data.datasets.nthu_ddd import NTHUDDDDataset
+from data.nthu_dataset import NTHUDriverDrowsinessDataset
 from data.datasets.mrl_eye import MRLEyeDataset
 from data.datasets.yawdd import YawDDDataset
 
@@ -15,22 +16,30 @@ class TestDatasets(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
 
         # 1. Create mock NTHU-DDD sample video
-        nthu_dir = os.path.join(self.test_dir, "nthu", "001", "Night")
-        os.makedirs(nthu_dir, exist_ok=True)
-        nthu_video = os.path.join(nthu_dir, "slow_blinking.avi")
+        nthu_video_dir = os.path.join(self.test_dir, "nthu_video", "001", "Night")
+        os.makedirs(nthu_video_dir, exist_ok=True)
+        nthu_video = os.path.join(nthu_video_dir, "slow_blinking.avi")
         out = cv2.VideoWriter(nthu_video, cv2.VideoWriter_fourcc(*'XVID'), 10, (224, 224))
         for _ in range(20):
             frame = np.zeros((224, 224, 3), dtype=np.uint8)
             out.write(frame)
         out.release()
 
-        # 2. Create mock MRL sample image
+        # 2. Create mock NTHU-DDD extracted image frames folder
+        nthu_img_dir = os.path.join(self.test_dir, "nthu_images", "002", "night_glasses", "slow_blinking")
+        os.makedirs(nthu_img_dir, exist_ok=True)
+        for i in range(1, 25):
+            img_path = os.path.join(nthu_img_dir, f"frame_{i:04d}.jpg")
+            img = np.zeros((224, 224, 3), dtype=np.uint8)
+            cv2.imwrite(img_path, img)
+
+        # 3. Create mock MRL sample image
         mrl_dir = os.path.join(self.test_dir, "mrl")
         os.makedirs(mrl_dir, exist_ok=True)
         mrl_img = os.path.join(mrl_dir, "s0001_00001_0_0_0_0_0_01.png")
         cv2.imwrite(mrl_img, np.zeros((64, 64, 3), dtype=np.uint8))
 
-        # 3. Create mock YawDD sample video
+        # 4. Create mock YawDD sample video
         yawdd_dir = os.path.join(self.test_dir, "yawdd")
         os.makedirs(yawdd_dir, exist_ok=True)
         yawdd_video = os.path.join(yawdd_dir, "yawning_driver.avi")
@@ -43,13 +52,32 @@ class TestDatasets(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def test_nthu_dataset_loading(self):
-        ds = NTHUDDDDataset(root_dir=os.path.join(self.test_dir, "nthu"), sequence_length=16, is_train=True)
+    def test_nthu_dataset_video_loading(self):
+        ds = NTHUDDDDataset(root_dir=os.path.join(self.test_dir, "nthu_video"), sequence_length=16, is_train=True)
+        self.assertEqual(len(ds), 1)
         item = ds[0]
         self.assertIn("video", item)
         self.assertIn("flow", item)
         self.assertEqual(item["video"].shape, (16, 3, 224, 224))
         self.assertEqual(item["flow"].shape, (16, 2, 112, 112))
+        self.assertEqual(item["label"].item(), 1)  # slow_blinking -> 1
+
+    def test_nthu_dataset_image_frames_loading(self):
+        # Test loading from extracted image frames directory
+        ds = NTHUDriverDrowsinessDataset(
+            root_dir=os.path.join(self.test_dir, "nthu_images"),
+            sequence_length=16,
+            frame_step=1,
+            is_train=True
+        )
+        self.assertEqual(len(ds), 1)
+        item = ds[0]
+        self.assertIn("video", item)
+        self.assertIn("flow", item)
+        self.assertEqual(item["video"].shape, (16, 3, 224, 224))
+        self.assertEqual(item["flow"].shape, (16, 2, 112, 112))
+        self.assertEqual(item["label"].item(), 1)  # slow_blinking -> 1
+        self.assertEqual(item["subject"], "002")
 
     def test_mrl_eye_loading(self):
         ds = MRLEyeDataset(root_dir=os.path.join(self.test_dir, "mrl"), is_train=True)

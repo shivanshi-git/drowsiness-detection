@@ -31,6 +31,7 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml"):
         root_dir=data_cfg["raw_dir"],
         batch_size=train_cfg["batch_size"],
         sequence_length=data_cfg["sequence_length"],
+        frame_step=data_cfg.get("frame_step", 2),
         num_workers=train_cfg["num_workers"]
     )
     print(f"[INFO] Loaded {len(train_loader.dataset)} training samples, {len(val_loader.dataset)} validation samples.")

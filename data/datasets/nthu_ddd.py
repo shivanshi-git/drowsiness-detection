@@ -1,4 +1,5 @@
 import os
+import re
 import cv2
 import numpy as np
 import torch
@@ -7,29 +8,66 @@ from data.transforms import LowLightVideoAugmentation
 from data.optical_flow import DenseOpticalFlowExtractor
 
 
+def natural_sort_key(s: str):
+    """Sort strings containing numbers in natural human order (e.g. frame_2 before frame_10)."""
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', str(s))]
+
+
 class NTHUDDDDataset(Dataset):
     """
     NTHU Driver Drowsiness Detection (NTHU-DDD) Dataset Loader.
-    Strictly parses real uploaded video sequences from raw_dir.
+    Supports both:
+      1. Direct Video files (.mp4, .avi, .mov, .mkv, .webm)
+      2. Frame-extracted image sequences (.jpg, .jpeg, .png, .bmp, .webp)
     """
     CLASS_MAP = {
-        "normal": 0, "normal_driving": 0,
-        "slow_blinking": 1, "slow_blink": 1, "blinking": 1,
+        "normal": 0, "normal_driving": 0, "nonsleepy": 0, "non_sleepy": 0, "neutral": 0,
+        "slow_blinking": 1, "slow_blink": 1, "blinking": 1, "blink": 1,
         "yawning": 2, "yawn": 2,
-        "nodding": 3, "head_nod": 3,
-        "eye_closure": 4, "sleep": 4, "drowsy": 4
+        "nodding": 3, "head_nod": 3, "head_nodding": 3, "nod": 3, "headnod": 3,
+        "eye_closure": 4, "sleep": 4, "sleepy": 4, "drowsy": 4, "closed_eye": 4, "eyes_closed": 4,
+        "sleepycombination": 4, "sleepy_combination": 4
     }
 
-    def __init__(self, root_dir: str, subjects: list = None, sequence_length: int = 16, frame_step: int = 2, is_train: bool = True):
+    VALID_IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp')
+    VALID_VIDEO_EXTS = ('.mp4', '.avi', '.mov', '.mkv', '.webm')
+
+    def __init__(
+        self,
+        root_dir: str,
+        subjects: list = None,
+        sequence_length: int = 16,
+        frame_step: int = 2,
+        is_train: bool = True
+    ):
         self.root_dir = root_dir
-        self.subjects = subjects or []
+        self.subjects = [str(s).zfill(3) if str(s).isdigit() else str(s) for s in (subjects or [])]
         self.sequence_length = sequence_length
-        self.frame_step = frame_step
+        self.frame_step = max(1, frame_step)
         self.is_train = is_train
         self.transform = LowLightVideoAugmentation(is_train=is_train)
         self.flow_extractor = DenseOpticalFlowExtractor()
         self.samples = []
         self._index()
+
+    def _match_subject(self, path: str) -> str:
+        path_norm = path.replace("\\", "/")
+        for subj in self.subjects:
+            pattern = rf"(^|/|_|-){re.escape(subj)}(/|_|-|$)"
+            if re.search(pattern, path_norm):
+                return subj
+        match = re.search(r'(?:subject[_\s]?|s)?(\d{3})', path_norm, re.IGNORECASE)
+        if match:
+            return match.group(1)
+        return "unknown"
+
+    def _infer_label_from_path(self, path: str) -> int:
+        path_lower = path.replace("\\", "/").lower()
+        sorted_keywords = sorted(self.CLASS_MAP.keys(), key=lambda x: -len(x))
+        for keyword in sorted_keywords:
+            if keyword in path_lower:
+                return self.CLASS_MAP[keyword]
+        return 0
 
     def _index(self):
         if not os.path.exists(self.root_dir):
@@ -38,72 +76,112 @@ class NTHUDDDDataset(Dataset):
                 f"Please upload/place the dataset into '{self.root_dir}' before starting training."
             )
 
-        for subj in os.listdir(self.root_dir):
-            if self.subjects and subj not in self.subjects:
+        for root, dirs, files in os.walk(self.root_dir):
+            subj = self._match_subject(root)
+            if self.subjects and (subj not in self.subjects) and not any(s in root for s in self.subjects):
                 continue
-            subj_path = os.path.join(self.root_dir, subj)
-            if not os.path.isdir(subj_path):
-                continue
-            for root, _, files in os.walk(subj_path):
-                for f in files:
-                    if f.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
-                        label = 0
-                        for k, v in self.CLASS_MAP.items():
-                            if k in f.lower():
-                                label = v
-                                break
-                        self.samples.append({
-                            "path": os.path.join(root, f),
-                            "label": label,
-                            "subject": subj
-                        })
+
+            # 1. Check for video files
+            video_files = [f for f in files if f.lower().endswith(self.VALID_VIDEO_EXTS)]
+            for vf in video_files:
+                video_path = os.path.join(root, vf)
+                video_subj = self._match_subject(video_path)
+                if self.subjects and (video_subj not in self.subjects) and not any(s in video_path for s in self.subjects):
+                    continue
+                label = self._infer_label_from_path(video_path)
+                self.samples.append({
+                    "type": "video",
+                    "path": video_path,
+                    "label": label,
+                    "subject": video_subj
+                })
+
+            # 2. Check for image sequences in directory
+            img_files = [f for f in files if f.lower().endswith(self.VALID_IMAGE_EXTS)]
+            if len(img_files) >= 2:
+                sorted_img_names = sorted(img_files, key=natural_sort_key)
+                sorted_img_paths = [os.path.join(root, f) for f in sorted_img_names]
+                label = self._infer_label_from_path(root)
+                self.samples.append({
+                    "type": "image_folder",
+                    "path": root,
+                    "frames": sorted_img_paths,
+                    "label": label,
+                    "subject": subj
+                })
 
         if len(self.samples) == 0:
             raise ValueError(
-                f"[DATASET ERROR] No valid video files (.mp4/.avi/.mov/.mkv) found in '{self.root_dir}'. "
-                f"Please verify your dataset files before running training."
+                f"[DATASET ERROR] No valid video files (.mp4/.avi) or image frame sequences (.jpg/.png) found in '{self.root_dir}'."
             )
 
     def __len__(self):
         return len(self.samples)
 
-    def _load_video_frames(self, video_path: str) -> list:
-        cap = cv2.VideoCapture(video_path)
-        raw_frames = []
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-            raw_frames.append(frame)
-            if len(raw_frames) > 300: # Memory safeguard
-                break
-        cap.release()
+    def _load_frames(self, sample: dict) -> list:
+        if sample["type"] == "image_folder":
+            frame_paths = sample["frames"]
+            total_len = len(frame_paths)
+            if total_len == 0:
+                return [np.zeros((224, 224, 3), dtype=np.uint8)] * self.sequence_length
 
-        if len(raw_frames) == 0:
-            return [np.zeros((224, 224, 3), dtype=np.uint8)] * self.sequence_length
+            stride = self.frame_step
+            req_len = self.sequence_length * stride
 
-        stride = self.frame_step
-        total_len = len(raw_frames)
-        req_len = self.sequence_length * stride
+            if total_len >= req_len:
+                start_idx = np.random.randint(0, total_len - req_len + 1) if self.is_train else 0
+                selected_paths = frame_paths[start_idx : start_idx + req_len : stride]
+            else:
+                indices = np.linspace(0, total_len - 1, self.sequence_length).astype(int)
+                selected_paths = [frame_paths[idx] for idx in indices]
 
-        if total_len >= req_len:
-            start_idx = np.random.randint(0, total_len - req_len + 1) if self.is_train else 0
-            selected = raw_frames[start_idx:start_idx + req_len:stride]
-        else:
-            indices = np.linspace(0, total_len - 1, self.sequence_length).astype(int)
-            selected = [raw_frames[idx] for idx in indices]
+            frames = []
+            for p in selected_paths:
+                img = cv2.imread(p)
+                if img is None:
+                    img = np.zeros((224, 224, 3), dtype=np.uint8)
+                frames.append(img)
+            return frames
 
-        return selected
+        elif sample["type"] == "video":
+            cap = cv2.VideoCapture(sample["path"])
+            raw_frames = []
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                raw_frames.append(frame)
+                if len(raw_frames) > 500:
+                    break
+            cap.release()
 
-    def __getitem__(self, idx):
-        s = self.samples[idx]
-        raw_frames = self._load_video_frames(s["path"])
+            if len(raw_frames) == 0:
+                return [np.zeros((224, 224, 3), dtype=np.uint8)] * self.sequence_length
+
+            stride = self.frame_step
+            total_len = len(raw_frames)
+            req_len = self.sequence_length * stride
+
+            if total_len >= req_len:
+                start_idx = np.random.randint(0, total_len - req_len + 1) if self.is_train else 0
+                selected = raw_frames[start_idx : start_idx + req_len : stride]
+            else:
+                indices = np.linspace(0, total_len - 1, self.sequence_length).astype(int)
+                selected = [raw_frames[idx] for idx in indices]
+
+            return selected
+
+        return [np.zeros((224, 224, 3), dtype=np.uint8)] * self.sequence_length
+
+    def __getitem__(self, idx: int):
+        sample = self.samples[idx]
+        raw_frames = self._load_frames(sample)
         video_t = self.transform(raw_frames)
         flow_t = self.flow_extractor.extract_sequence_flow(raw_frames)
 
         return {
             "video": video_t,
             "flow": flow_t,
-            "label": torch.tensor(s["label"], dtype=torch.long),
-            "subject": s.get("subject", "unknown")
+            "label": torch.tensor(sample["label"], dtype=torch.long),
+            "subject": sample.get("subject", "unknown")
         }

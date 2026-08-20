@@ -5,7 +5,7 @@
 
 dataset:
   name: "NTHU-DDD"
-  raw_dir: "data/raw/nthu_ddd"
+  raw_dir: "archive(2)/NTHU DDD"
   processed_dir: "data/nthu_ddd_processed"
   sequence_length: 16       # Number of consecutive temporal frames per sample
   frame_step: 2             # Frame sub-sampling step (stride between selected frames)
@@ -21,9 +21,9 @@ dataset:
     - "Nodding"
     - "Eye Closure"
   subject_splits:
-    train_subjects: ["001", "002", "004", "005", "006", "008", "009", "010", "011", "012", "013", "014", "015", "017", "018"]
-    val_subjects: ["019", "020", "021"]
-    test_subjects: ["022", "023", "024", "026", "030"]
+    train_subjects: ["001", "002", "005"]
+    val_subjects: ["006"]
+    test_subjects: ["006"]
 
 pipeline:
   retinaface:
@@ -75,22 +75,18 @@ pipeline:
 # Training Hyperparameters — tuned for 90%+ accuracy
 # ------------------------------------------------------------------------------
 training:
-<<<<<<< HEAD
-  batch_size: 8             # Reduce to 4 if GPU OOM
-  epochs: 60                # More epochs (early stopping prevents over-fitting)
-  lr: 3.0e-4                # Higher LR — warmup scales it safely
-=======
-  batch_size: 32
+  batch_size: 16
   epochs: 30
   learning_rate: 3.0e-4
->>>>>>> f6bc4d4cd96cb30f195e0e32a1e7642b8bb06350
   min_lr: 1.0e-6
-  weight_decay: 5.0e-5      # Reduced weight decay for Transformers
-  warmup_epochs: 6          # Linear LR warmup to avoid early instability
-  gradient_clip_norm: 1.0   # Essential for Transformer stability
-  mixed_precision: true     # AMP for speed (GPU only)
-  num_workers: 4            # Set to 0 on Windows if dataloader errors
-  checkpoint_dir: "saved_models/nthu_sota_90"
+  weight_decay: 1.0e-4
+  warmup_epochs: 5
+  optimizer: "AdamW"
+  scheduler: "CosineAnnealingLR"
+  gradient_clip_norm: 1.0
+  mixed_precision: true
+  num_workers: 4
+  checkpoint_dir: "saved_models"
   save_best_only: true
   num_classes: 5
 

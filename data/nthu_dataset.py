@@ -228,16 +228,25 @@ def build_nthu_dataloaders(
     batch_size: int = 8,
     sequence_length: int = 16,
     frame_step: int = 2,
-    num_workers: int = 0
+    num_workers: int = 0,
+    train_subjects: list = None,
+    val_subjects: list = None
 ):
+    if train_subjects is None:
+        train_subjects = ["001", "002", "005"]
+    if val_subjects is None:
+        val_subjects = ["006"]
+
     train_dataset = NTHUDriverDrowsinessDataset(
         root_dir=root_dir,
+        subjects=train_subjects,
         sequence_length=sequence_length,
         frame_step=frame_step,
         is_train=True
     )
     val_dataset = NTHUDriverDrowsinessDataset(
         root_dir=root_dir,
+        subjects=val_subjects,
         sequence_length=sequence_length,
         frame_step=frame_step,
         is_train=False

@@ -99,16 +99,32 @@ class NTHUDDDDataset(Dataset):
             # 2. Check for image sequences in directory
             img_files = [f for f in files if f.lower().endswith(self.VALID_IMAGE_EXTS)]
             if len(img_files) >= 2:
-                sorted_img_names = sorted(img_files, key=natural_sort_key)
-                sorted_img_paths = [os.path.join(root, f) for f in sorted_img_names]
-                label = self._infer_label_from_path(root)
-                self.samples.append({
-                    "type": "image_folder",
-                    "path": root,
-                    "frames": sorted_img_paths,
-                    "label": label,
-                    "subject": subj
-                })
+                from collections import defaultdict
+                clips = defaultdict(list)
+                for f in img_files:
+                    base = f.rsplit('_', 2)
+                    clip_key = base[0] if len(base) >= 3 else root
+                    clips[clip_key].append(f)
+
+                for clip_key, f_list in clips.items():
+                    sorted_img_names = sorted(f_list, key=natural_sort_key)
+                    sorted_img_paths = [os.path.join(root, fn) for fn in sorted_img_names]
+                    sample_path = os.path.join(root, clip_key) if clip_key != root else root
+                    clip_subj = self._match_subject(sample_path)
+                    if clip_subj == "unknown":
+                        clip_subj = self._match_subject(sorted_img_names[0])
+                    if self.subjects and (clip_subj not in self.subjects) and not any(s in sample_path for s in self.subjects):
+                        continue
+                    label = self._infer_label_from_path(sorted_img_names[0]) if clip_key != root else self._infer_label_from_path(root)
+                    if "drowsy" in root.lower() and "notdrowsy" not in root.lower() and label == 0:
+                        label = 4  # Drowsy / Eye Closure
+                    self.samples.append({
+                        "type": "image_folder",
+                        "path": sample_path,
+                        "frames": sorted_img_paths,
+                        "label": label,
+                        "subject": clip_subj
+                    })
 
         if len(self.samples) == 0:
             raise ValueError(

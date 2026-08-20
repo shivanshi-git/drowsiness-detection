@@ -157,7 +157,8 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
         print(
             f"[{model_name.upper()}] Epoch [{epoch:02d}/{num_epochs:02d}] ({epoch_time:.1f}s) | "
             f"Train Loss: {train_loss:.4f}, Train F1: {train_metrics['macro_f1']*100:.1f}% | "
-            f"Val Loss: {val_loss:.4f}, Val Acc: {val_metrics['accuracy']*100:.1f}%, Val F1: {val_metrics['macro_f1']*100:.1f}%"
+            f"Val Loss: {val_loss:.4f}, Val Acc: {val_metrics['accuracy']*100:.1f}%, Val F1: {val_metrics['macro_f1']*100:.1f}%",
+            flush=True
         )
 
         history.append({

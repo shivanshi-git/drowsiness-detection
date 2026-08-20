@@ -76,6 +76,7 @@ ENV/
 .idea/
 *.swp
 *.swo
+token.txt
 
 # OS System Files
 .DS_Store

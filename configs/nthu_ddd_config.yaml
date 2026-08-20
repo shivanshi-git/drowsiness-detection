@@ -1,13 +1,14 @@
 # ==============================================================================
 # SOTA Low-Light Driver Drowsiness Detection Pipeline Configuration (NTHU-DDD)
+# Target: 90%+ Validation Accuracy
 # ==============================================================================
 
 dataset:
   name: "NTHU-DDD"
-  raw_dir: "archive(2)/NTHU DDD"
+  raw_dir: "data/raw/nthu_ddd"
   processed_dir: "data/nthu_ddd_processed"
   sequence_length: 16       # Number of consecutive temporal frames per sample
-  frame_step: 2             # Frame sub-sampling step
+  frame_step: 2             # Frame sub-sampling step (stride between selected frames)
   image_size: [224, 224]    # [H, W] for LLFormer & Face RoI
   eye_crop_size: [64, 64]   # [H, W] for Eye RoIs
   mouth_crop_size: [64, 64] # [H, W] for Mouth RoI
@@ -29,7 +30,7 @@ pipeline:
     confidence_threshold: 0.80
     nms_threshold: 0.40
     input_size: [320, 320]
-  
+
   llformer:
     dim: 48
     num_blocks: [2, 2, 4, 4]
@@ -70,26 +71,38 @@ pipeline:
     mlp_ratio: 4.0
     dropout: 0.1
 
+# ------------------------------------------------------------------------------
+# Training Hyperparameters — tuned for 90%+ accuracy
+# ------------------------------------------------------------------------------
 training:
-  batch_size: 8
-  epochs: 50
-  learning_rate: 1.0e-4
+  batch_size: 8             # Reduce to 4 if GPU OOM
+  epochs: 60                # More epochs (early stopping prevents over-fitting)
+  lr: 3.0e-4                # Higher LR — warmup scales it safely
   min_lr: 1.0e-6
-  weight_decay: 1.0e-4
-  warmup_epochs: 5
-  optimizer: "AdamW"
-  scheduler: "CosineAnnealingLR"
-  gradient_clip_norm: 1.0
-  mixed_precision: true
-  num_workers: 4
-  checkpoint_dir: "saved_models/low_light_sota"
+  weight_decay: 5.0e-5      # Reduced weight decay for Transformers
+  warmup_epochs: 6          # Linear LR warmup to avoid early instability
+  gradient_clip_norm: 1.0   # Essential for Transformer stability
+  mixed_precision: true     # AMP for speed (GPU only)
+  num_workers: 4            # Set to 0 on Windows if dataloader errors
+  checkpoint_dir: "saved_models/nthu_sota_90"
   save_best_only: true
+  num_classes: 5
+
+  # MixUp augmentation (clip-level blending)
+  use_mixup: true
+  mixup_alpha: 0.4          # Beta distribution alpha for MixUp blending ratio
+
+  # EMA (Exponential Moving Average) for stable val
+  ema_decay: 0.9995
+
+  # Early stopping
+  early_stop_patience: 12   # Stop if no improvement for 12 epochs
 
 adaptive_alarm:
-  smoothing_window: 10      # Moving average window across inference frames
-  alert_level_1_thresh: 0.45 # Visual Soft Alert (Notice)
-  alert_level_2_thresh: 0.65 # Audible Chime (Warning)
-  alert_level_3_thresh: 0.85 # Critical Continuous Siren (Emergency)
-  perclos_window_sec: 60    # PERCLOS evaluation window in seconds
-  perclos_drowsy_thresh: 0.15 # > 15% eye closure indicates fatigue
-  consecutive_closure_sec: 1.5 # Consecutive seconds with closed eyes for emergency trigger
+  smoothing_window: 10
+  alert_level_1_thresh: 0.45
+  alert_level_2_thresh: 0.65
+  alert_level_3_thresh: 0.85
+  perclos_window_sec: 60
+  perclos_drowsy_thresh: 0.15
+  consecutive_closure_sec: 1.5

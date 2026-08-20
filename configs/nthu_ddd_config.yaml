@@ -1,0 +1,95 @@
+# ==============================================================================
+# SOTA Low-Light Driver Drowsiness Detection Pipeline Configuration (NTHU-DDD)
+# ==============================================================================
+
+dataset:
+  name: "NTHU-DDD"
+  raw_dir: "data/nthu_ddd_raw"
+  processed_dir: "data/nthu_ddd_processed"
+  sequence_length: 16       # Number of consecutive temporal frames per sample
+  frame_step: 2             # Frame sub-sampling step
+  image_size: [224, 224]    # [H, W] for LLFormer & Face RoI
+  eye_crop_size: [64, 64]   # [H, W] for Eye RoIs
+  mouth_crop_size: [64, 64] # [H, W] for Mouth RoI
+  optical_flow_size: [112, 112] # [H, W] for Optical Flow ViT
+  num_classes: 5            # 0: Normal, 1: Slow Blinking, 2: Yawning, 3: Nodding, 4: Eye Closure
+  class_names:
+    - "Normal"
+    - "Slow Blinking"
+    - "Yawning"
+    - "Nodding"
+    - "Eye Closure"
+  subject_splits:
+    train_subjects: ["001", "002", "004", "005", "006", "008", "009", "010", "011", "012", "013", "014", "015", "017", "018"]
+    val_subjects: ["019", "020", "021"]
+    test_subjects: ["022", "023", "024", "026", "030"]
+
+pipeline:
+  retinaface:
+    confidence_threshold: 0.80
+    nms_threshold: 0.40
+    input_size: [320, 320]
+  
+  llformer:
+    dim: 48
+    num_blocks: [2, 2, 4, 4]
+    heads: [1, 2, 4, 8]
+    ffn_expansion_factor: 2.66
+    bias: false
+    pretrained_weights: null
+
+  region_vit:
+    patch_size: 16
+    embed_dim: 256
+    depth: 4
+    num_heads: 8
+    mlp_ratio: 4.0
+    dropout: 0.1
+
+  flow_vit:
+    patch_size: 16
+    embed_dim: 256
+    depth: 4
+    num_heads: 8
+    mlp_ratio: 4.0
+    dropout: 0.1
+
+  cross_attention:
+    dim: 256
+    num_heads: 8
+    dropout: 0.1
+
+  spatial_channel_attention:
+    reduction_ratio: 16
+    kernel_size: 7
+
+  temporal_transformer:
+    embed_dim: 256
+    depth: 4
+    num_heads: 8
+    mlp_ratio: 4.0
+    dropout: 0.1
+
+training:
+  batch_size: 8
+  epochs: 50
+  learning_rate: 1.0e-4
+  min_lr: 1.0e-6
+  weight_decay: 1.0e-4
+  warmup_epochs: 5
+  optimizer: "AdamW"
+  scheduler: "CosineAnnealingLR"
+  gradient_clip_norm: 1.0
+  mixed_precision: true
+  num_workers: 4
+  checkpoint_dir: "saved_models/low_light_sota"
+  save_best_only: true
+
+adaptive_alarm:
+  smoothing_window: 10      # Moving average window across inference frames
+  alert_level_1_thresh: 0.45 # Visual Soft Alert (Notice)
+  alert_level_2_thresh: 0.65 # Audible Chime (Warning)
+  alert_level_3_thresh: 0.85 # Critical Continuous Siren (Emergency)
+  perclos_window_sec: 60    # PERCLOS evaluation window in seconds
+  perclos_drowsy_thresh: 0.15 # > 15% eye closure indicates fatigue
+  consecutive_closure_sec: 1.5 # Consecutive seconds with closed eyes for emergency trigger

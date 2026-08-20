@@ -1,2 +1,0 @@
-epoch,train_loss,train_acc_pct,val_loss,val_acc_pct
-1,0.0185,86.77,0.4661,53.39

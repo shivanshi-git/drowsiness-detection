@@ -1,0 +1,9 @@
+adaptive_alarm:
+  smoothing_window: 10
+  level_1_thresh: 0.45   # Visual Soft Alert
+  level_2_thresh: 0.65   # Caution Chime
+  level_3_thresh: 0.85   # Emergency Siren
+  perclos_window_sec: 60.0
+  perclos_drowsy_thresh: 0.15
+  consecutive_closure_sec: 1.5
+  audio_alerts: true

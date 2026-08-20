@@ -1,187 +1,88 @@
+import cv2
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
-import cv2
 
-class GradCAM:
+
+class GradCAMExplainer:
     """
-    Gradient-weighted Class Activation Mapping (Grad-CAM).
-    Computes fine-grained activation heatmaps highlighting regions of the face/eye/mouth
-    that drive the driver drowsiness prediction.
+    Grad-CAM & ViT Attention Map Generator for Region-Aware Vision Transformer & LLFormer.
+    Produces high-resolution visual heatmaps overlaying input low-light frames.
     """
-    def __init__(self, model, target_layer):
+    def __init__(self, model: torch.nn.Module, target_layer: torch.nn.Module = None):
         self.model = model
-        self.target_layer = target_layer
+        self.target_layer = target_layer or model.region_vit.blocks[-1].norm1
         self.gradients = None
         self.activations = None
-        self.hooks = []
         self._register_hooks()
 
     def _register_hooks(self):
         def forward_hook(module, input, output):
-            self.activations = output.detach()
+            self.activations = output
 
         def backward_hook(module, grad_in, grad_out):
-            self.gradients = grad_out[0].detach()
+            self.gradients = grad_out[0]
 
-        self.hooks.append(self.target_layer.register_forward_hook(forward_hook))
-        self.hooks.append(self.target_layer.register_full_backward_hook(backward_hook))
+        self.target_layer.register_forward_hook(forward_hook)
+        self.target_layer.register_full_backward_hook(backward_hook)
 
-    def generate_heatmap(self, input_tensor, class_idx=None):
+    def generate_cam(
+        self,
+        video_tensor: torch.Tensor,
+        flow_tensor: torch.Tensor,
+        target_class: int = None
+    ) -> np.ndarray:
         """
-        Generates a 2D Grad-CAM heatmap array normalized between 0 and 1.
+        Generates 2D Grad-CAM heatmap over the video sequence.
+        Args:
+            video_tensor: (1, T, 3, H, W)
+            flow_tensor: (1, T, 2, H_f, W_f)
+            target_class: Integer class index to explain
+        Returns:
+            np.ndarray of shape (H, W) heatmap in [0, 1]
         """
         self.model.eval()
         self.model.zero_grad()
 
-        # Forward pass
-        output = self.model(input_tensor)
+        out = self.model(video_tensor, flow_tensor)
+        logits = out["logits"]
 
-        if class_idx is None:
-            class_idx = torch.argmax(output, dim=1).item()
+        if target_class is None:
+            target_class = torch.argmax(logits, dim=1).item()
 
-        score = output[0, class_idx]
-        
-        # Backward pass
+        score = logits[0, target_class]
         score.backward(retain_graph=True)
 
         if self.gradients is None or self.activations is None:
-            # Fallback if hooks were skipped
-            return np.ones((input_tensor.shape[2], input_tensor.shape[3]), dtype=np.float32), class_idx, F.softmax(output, dim=1)[0, class_idx].item()
+            # Fallback uniform heatmap
+            return np.ones((video_tensor.shape[3], video_tensor.shape[4]), dtype=np.float32)
 
-        gradients = self.gradients.cpu().data.numpy()[0]
-        activations = self.activations.cpu().data.numpy()[0]
+        # Activations shape: (T, num_tokens, D)
+        # Take sequence average
+        act = self.activations  # (B*T, N, D)
+        grad = self.gradients   # (B*T, N, D)
 
-        # Global Average Pooling of gradients
-        weights = np.mean(gradients, axis=(1, 2))
+        # Token importance weights
+        weights = torch.mean(grad, dim=-1, keepdim=True) # (B*T, N, 1)
+        cam = torch.sum(weights * act, dim=-1)           # (B*T, N)
+        cam = F.relu(cam)
 
-        # Weighted combination of activation maps
-        cam = np.zeros(activations.shape[1:], dtype=np.float32)
-        for i, w in enumerate(weights):
-            cam += w * activations[i]
+        # Extract face tokens (first 196 tokens after CLS token)
+        face_tokens = cam[:, 1:197].mean(dim=0)          # (196,)
+        grid_size = int(np.sqrt(face_tokens.shape[0]))   # 14x14
+        heatmap_2d = face_tokens.view(grid_size, grid_size).detach().cpu().numpy()
 
-        # Apply ReLU to retain positive attributions
-        cam = np.maximum(cam, 0)
-        
-        # Normalize between 0 and 1
-        if cam.max() > 0:
-            cam = cam / cam.max()
+        # Normalize and upscale to image resolution (H, W)
+        heatmap_2d = (heatmap_2d - np.min(heatmap_2d)) / max(1e-5, (np.max(heatmap_2d) - np.min(heatmap_2d)))
+        heatmap_resized = cv2.resize(heatmap_2d, (video_tensor.shape[4], video_tensor.shape[3]))
+        return heatmap_resized
 
-        # Resize heatmap to input tensor dimensions
-        _, _, h, w = input_tensor.shape
-        cam_resized = cv2.resize(cam, (w, h))
-
-        probs = F.softmax(output, dim=1)[0]
-        confidence = probs[class_idx].item()
-
-        return cam_resized, class_idx, confidence
-
-    def remove_hooks(self):
-        for hook in self.hooks:
-            hook.remove()
-
-
-class LayerCAM:
-    """
-    LayerCAM: Fine-grained spatial attribution maps on 128x128 eye crops
-    by computing element-wise spatial gradient-activation products.
-    Eliminates 4x4 spatial grid degradation.
-    """
-    def __init__(self, model, target_layer):
-        self.model = model
-        self.target_layer = target_layer
-        self.gradients = None
-        self.activations = None
-        self.hooks = []
-        self._register_hooks()
-
-    def _register_hooks(self):
-        def forward_hook(module, input, output):
-            self.activations = output.detach()
-
-        def backward_hook(module, grad_in, grad_out):
-            self.gradients = grad_out[0].detach()
-
-        self.hooks.append(self.target_layer.register_forward_hook(forward_hook))
-        self.hooks.append(self.target_layer.register_full_backward_hook(backward_hook))
-
-    def generate_heatmap(self, input_tensor, class_idx=None):
-        self.model.eval()
-        self.model.zero_grad()
-
-        output = self.model(input_tensor)
-        if class_idx is None:
-            class_idx = torch.argmax(output, dim=1).item()
-
-        score = output[0, class_idx]
-        score.backward(retain_graph=True)
-
-        if self.gradients is None or self.activations is None:
-            return np.ones((input_tensor.shape[2], input_tensor.shape[3]), dtype=np.float32), class_idx, F.softmax(output, dim=1)[0, class_idx].item()
-
-        gradients = self.gradients[0].cpu().numpy()
-        activations = self.activations[0].cpu().numpy()
-
-        # Element-wise positive spatial weighting (LayerCAM)
-        positive_grads = np.maximum(gradients, 0)
-        cam = np.sum(positive_grads * activations, axis=0)
-        cam = np.maximum(cam, 0)
-
-        if cam.max() > 0:
-            cam = cam / cam.max()
-
-        _, _, h, w = input_tensor.shape
-        cam_resized = cv2.resize(cam, (w, h))
-        confidence = F.softmax(output, dim=1)[0, class_idx].item()
-
-        return cam_resized, class_idx, confidence
-
-    def remove_hooks(self):
-        for hook in self.hooks:
-            hook.remove()
-
-
-class IntegratedGradients:
-    """
-    Model-Agnostic Integrated Gradients (IG).
-    Integrates gradients along straight path from baseline to input crop.
-    Enables unified cross-paradigm explanation for both CNNs and Vision Transformers (ViT).
-    """
-    def __init__(self, model):
-        self.model = model
-
-    def generate_heatmap(self, input_tensor, class_idx=None, steps=20):
-        self.model.eval()
-
-        if class_idx is None:
-            with torch.no_grad():
-                output = self.model(input_tensor)
-                class_idx = torch.argmax(output, dim=1).item()
-
-        baseline = torch.zeros_like(input_tensor)
-        scaled_inputs = [baseline + (float(i) / steps) * (input_tensor - baseline) for i in range(steps + 1)]
-
-        grads = []
-        for scaled_input in scaled_inputs:
-            scaled_input = scaled_input.clone().detach().requires_grad_(True)
-            output = self.model(scaled_input)
-            score = output[0, class_idx]
-            self.model.zero_grad()
-            score.backward()
-            grads.append(scaled_input.grad.detach().cpu().numpy()[0])
-
-        avg_grads = np.mean(np.array(grads), axis=0)
-        delta = (input_tensor - baseline).cpu().numpy()[0]
-        integrated_grad = delta * avg_grads
-
-        attribution = np.sum(np.abs(integrated_grad), axis=0)
-        attribution = np.maximum(attribution, 0)
-
-        if attribution.max() > 0:
-            attribution = attribution / attribution.max()
-
-        with torch.no_grad():
-            output = self.model(input_tensor)
-            confidence = F.softmax(output, dim=1)[0, class_idx].item()
-
-        return attribution, class_idx, confidence
+    @staticmethod
+    def overlay_heatmap(image_bgr: np.ndarray, heatmap: np.ndarray, alpha: float = 0.5) -> np.ndarray:
+        """
+        Overlays Jet colormap heatmap onto original image frame.
+        """
+        heatmap_uint8 = np.uint8(255 * heatmap)
+        color_heatmap = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
+        overlay = cv2.addWeighted(color_heatmap, alpha, image_bgr, 1.0 - alpha, 0)
+        return overlay

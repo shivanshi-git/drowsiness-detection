@@ -1,0 +1,18 @@
+dataset:
+  name: "YawDD"
+  raw_dir: "data/raw/yawdd"
+  sequence_length: 16
+  image_size: [224, 224]
+  num_classes: 3
+  class_names: ["Normal", "Talking", "Yawning"]
+
+model:
+  embed_dim: 256
+  depth: 4
+  num_heads: 8
+
+training:
+  batch_size: 8
+  epochs: 40
+  lr: 1.0e-4
+  checkpoint_dir: "saved_models/yawdd"

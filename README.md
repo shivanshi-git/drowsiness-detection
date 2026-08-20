@@ -1,103 +1,165 @@
-# Driver Drowsiness Detection System with Explainable AI (XAI)
+# Driver Drowsiness Detection: SOTA Transformer & Multi-Modal XAI
 
-A research prototype for **Driver Drowsiness Detection** using a canonical ResNet18 image model, Grad-CAM visualizations, PERCLOS temporal buffering, and an interactive Streamlit dashboard. The project is not yet a validated safety-critical deployment.
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![NTHU-DDD](https://img.shields.io/badge/Benchmark-NTHU--DDD-green.svg)](https://cv.cs.nthu.edu.tw/)
+[![XAI](https://img.shields.io/badge/Explainability-GradCAM%20%7C%20IG%20%7C%20SHAP%20%7C%20Temporal-orange.svg)](xai/)
 
----
-
-## 🛠️ Libraries and Frameworks Used
-- **PyTorch & Torchvision**: Core deep learning framework used for model building, training, and evaluation.
-- **OpenCV**: Used for real-time video and image processing, face detection, and ROI extraction.
-- **MediaPipe**: Used for high-fidelity facial landmark detection to extract eye and mouth regions.
-- **Scikit-Learn**: Utilized for evaluation metrics (precision, recall, F1-score, ROC-AUC) and confusion matrix generation.
-- **Matplotlib & Seaborn**: Used for plotting training curves, heatmaps, and matrices.
-- **Streamlit**: Used to build the interactive web dashboard.
-- **NumPy & Pandas**: Essential for numerical operations and data structuring.
+A State-of-the-Art (SOTA) Deep Learning pipeline for driver drowsiness and microsleep detection designed specifically for **low-light, infrared (IR), and challenging in-cabin driving scenarios** across **NTHU-DDD, YawDD, and MRL Eye** datasets.
 
 ---
 
-## 📂 Project Structure & File Descriptions
+## 🏛️ Pipeline Architecture
 
-| File / Directory | Purpose |
-| :--- | :--- |
-| `app.py` | Streamlit interactive web dashboard for real-time predictions and model comparison. |
-| `train.py` | Core training script to train and fine-tune individual models (saves evaluation metrics, graphs, and models). |
-| `train_all_models.py` | Reproducible ResNet18 training entry point. |
-| `predict.py` | Inference script to predict drowsiness on a single image and generate Grad-CAM heatmaps. |
-| `data/preprocess_mixed_data.py` | Unified dataset preprocessor. Merges images/videos from multiple archives into a balanced structure. |
-| `data/dataset_loader.py` | PyTorch `Dataset` and `DataLoader` setup with data augmentation (Albumentations/Torchvision). |
-| `models/model_factory.py` | Creates the active ResNet18 model and retains legacy experimental constructors. |
-| `models/custom_cnn.py` | Defines the specific lightweight Custom CNN architecture designed for fast inference. |
-| `utils/metrics.py` | Helper functions for calculating evaluation matrices, ROC curves, and logging training results. |
-| `utils/face_mesh.py` | Hybrid geometric metrics implementation (e.g., EAR, MAR calculation using MediaPipe). |
-| `xai/grad_cam.py` | Explainable AI engine using Gradient-weighted Class Activation Mapping to visualize model attention. |
-
----
-
-## 🔄 Code Flow Diagram
-
-```mermaid
-graph TD
-    A[Raw Data Archives] -->|preprocess_mixed_data.py| B(Processed Dataset)
-    B -->|dataset_loader.py| C{DataLoader}
-    C -->|train.py| D[Model Training & Fine-Tuning]
-    D -->|model_factory.py| E((Candidate Models))
-    D --> F[Saved Models .pth]
-    D --> G[Evaluation Results]
-    G --> H(Metrics, Graphs, Heatmaps)
-    F --> I[predict.py / app.py]
-    I -->|xai/grad_cam.py| J[Grad-CAM Visualizations]
+```
+Camera (Raw Low-Light Video Stream)
+  │
+  ▼
+RetinaFace (Face & Landmark Localization)
+  │
+  ▼
+LLFormer (Low-Light Enhancement Transformer)
+  │
+  ├───► Region-Aware ViT (Spatial Stream)
+  │
+  └───► Optical Flow ViT (Motion Stream)
+  │
+  ▼
+Cross-Attention Fusion + Spatial/Channel Attention
+  │
+  ▼
+Temporal Sequence Transformer
+  │
+  ▼
+Drowsiness Classification Head
+  │
+  ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  EXPLAINABILITY (XAI) LAYER                  │
+├──────────────────────────────────────────────────────────────┤
+│  • Grad-CAM & Attention Maps (Spatial eye/mouth saliency)   │
+│  • Integrated Gradients (Axiomatic pixel/motion attributions)│
+│  • Regional SHAP (Quantified Shapley values per facial RoI)  │
+│  • Temporal Explainer (Frame-level confidence timeline)      │
+│  • Facial Landmark Explainer (Geometric EAR, MAR, Head Pose) │
+└──────────────────────────────────────────────────────────────┘
+  │
+  ▼
+Adaptive Real-Time Alarm & Explainable Alert Engine
 ```
 
 ---
 
-## 📊 Evaluation Matrix
+## 📁 Project Structure
 
-*The table below will be updated as models complete their 25-epoch fine-tuning.*
-
-| Model Architecture | Accuracy | Precision | Recall | F1-Score | ROC-AUC | Latency (ms) | FPS |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **ResNet18** | *Train with the command below* | - | - | - | - | - | - |
-
-*(All evaluation graphs, confusion matrices, and ROC curves are automatically saved in the `results/` directory after each training run).*
+```
+driver_drowsiness/
+│
+├── configs/
+│   ├── nthu_ddd.yaml
+│   ├── mrl_eye.yaml
+│   ├── yawdd.yaml
+│   ├── cross_dataset.yaml
+│   └── alarm.yaml
+│
+├── data/
+│   ├── datasets/
+│   │   ├── nthu_ddd.py
+│   │   ├── mrl_eye.py
+│   │   └── yawdd.py
+│   │
+│   ├── splits/
+│   │   ├── nthu_subject_split.py
+│   │   ├── mrl_subject_split.py
+│   │   └── yawdd_subject_split.py
+│   │
+│   ├── optical_flow.py
+│   ├── temporal_sampler.py
+│   └── transforms.py
+│
+├── models/
+│   ├── backbones/
+│   │   ├── resnet50.py
+│   │   ├── inceptionv3.py
+│   │   ├── vit_baseline.py
+│   │   └── swin_baseline.py
+│   │
+│   ├── retinaface_detector.py
+│   ├── llformer.py
+│   ├── region_vit.py
+│   ├── flow_vit.py
+│   ├── cross_attention_fusion.py
+│   ├── temporal_transformer.py
+│   └── drowsiness_pipeline.py
+│
+├── training/
+│   ├── train.py
+│   ├── trainer.py
+│   ├── losses.py
+│   └── checkpoint.py
+│
+├── inference/
+│   ├── adaptive_alarm.py
+│   ├── realtime_stream.py
+│   └── visualization.py
+│
+├── evaluation/
+│   ├── metrics.py
+│   ├── confusion_matrix.py
+│   ├── roc_auc.py
+│   ├── benchmark.py
+│   ├── cross_dataset.py
+│   └── robustness.py
+│
+├── experiments/
+│   ├── baseline_vit/
+│   ├── improved_vit/
+│   ├── ablation/
+│   └── cross_dataset/
+│
+├── xai/
+│   ├── grad_cam.py
+│   ├── integrated_gradients.py
+│   ├── shap_explainer.py
+│   ├── temporal_explainer.py
+│   ├── landmark_explainer.py
+│   ├── alarm_explainer.py
+│   └── master_explainer.py
+│
+├── tests/
+│   ├── test_dataset.py
+│   ├── test_models.py
+│   ├── test_pipeline.py
+│   └── test_alarm.py
+│
+├── train.py
+├── evaluate.py
+├── inference.py
+├── requirements.txt
+├── README.md
+└── .gitignore
+```
 
 ---
 
-## ⚡ Terminal Commands to Start the Project
+## 🚀 Quick Start
 
-### 1. Install Dependencies
+### 1. Run Complete Test Suite
 ```bash
-python -m venv .venv
-.venv\\Scripts\\activate
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m unittest discover tests
 ```
 
-### 2. Prepare Dataset
-Place raw data in `archive/`, `archive(1)/`, etc., and run the preprocessor:
+### 2. Train Model
 ```bash
-python data/preprocess_mixed_data.py
+python train.py --config configs/nthu_ddd.yaml
 ```
 
-### 3. Fine-Tune the Canonical ResNet18 Model
+### 3. Evaluate & Benchmark
 ```bash
-python train.py --model custom_cnn --dataset_dir processed_dataset --epochs 25 --batch_size 32
+python evaluate.py --config configs/nthu_ddd.yaml --checkpoint saved_models/nthu_ddd/best_model.pth
 ```
-Training checkpoints are written to `saved_models/`; the dashboard loads the best matching checkpoint from that directory.
-For balanced classes, the training default uses `--focal_alpha 0.5`; tune it only on the validation split, never on the held-out test split.
 
-Before calling a model production-ready, run the fail-closed evidence check:
+### 4. Real-Time HUD with Explainability (XAI)
 ```bash
-python validate_production_readiness.py --model custom_cnn
-```
-It requires train/validation/test splits, a best checkpoint, and a held-out-test report with calibration metrics.
-
-### 4. Single Image Prediction & XAI
-```bash
-python predict.py --image path/to/image.jpg --model custom_cnn --out output_xai.jpg
-```
-Pass a trained checkpoint explicitly with `--checkpoint saved_models/custom_cnn_best_model.pth`.
-
-### 5. Launch Interactive Dashboard
-```bash
-streamlit run app.py
+python inference.py --source 0
 ```

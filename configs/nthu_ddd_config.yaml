@@ -75,9 +75,15 @@ pipeline:
 # Training Hyperparameters — tuned for 90%+ accuracy
 # ------------------------------------------------------------------------------
 training:
+<<<<<<< HEAD
   batch_size: 8             # Reduce to 4 if GPU OOM
   epochs: 60                # More epochs (early stopping prevents over-fitting)
   lr: 3.0e-4                # Higher LR — warmup scales it safely
+=======
+  batch_size: 32
+  epochs: 30
+  learning_rate: 3.0e-4
+>>>>>>> f6bc4d4cd96cb30f195e0e32a1e7642b8bb06350
   min_lr: 1.0e-6
   weight_decay: 5.0e-5      # Reduced weight decay for Transformers
   warmup_epochs: 6          # Linear LR warmup to avoid early instability

@@ -112,9 +112,11 @@ class NTHUDriverDrowsinessDataset(Dataset):
                     clip_key = base[0] if len(base) >= 3 else root
                     clips[clip_key].append(f)
 
+                stride = 12
+                req_len = self.sequence_length * self.frame_step
                 for clip_key, f_list in clips.items():
                     sorted_img_names = sorted(f_list, key=natural_sort_key)
-                    sorted_img_paths = [os.path.join(root, fn) for fn in sorted_img_names]
+                    n_frames = len(sorted_img_names)
                     sample_path = os.path.join(root, clip_key) if clip_key != root else root
                     clip_subj = self._match_subject(sample_path)
                     if clip_subj == "unknown":
@@ -124,13 +126,27 @@ class NTHUDriverDrowsinessDataset(Dataset):
                     label = self._infer_label_from_path(sorted_img_names[0]) if clip_key != root else self._infer_label_from_path(root)
                     if "drowsy" in root.lower() and "notdrowsy" not in root.lower() and label == 0:
                         label = 4  # Drowsy / Eye Closure
-                    self.samples.append({
-                        "type": "image_folder",
-                        "path": sample_path,
-                        "frames": sorted_img_paths,
-                        "label": label,
-                        "subject": clip_subj
-                    })
+
+                    if n_frames <= req_len:
+                        sorted_img_paths = [os.path.join(root, fn) for fn in sorted_img_names]
+                        self.samples.append({
+                            "type": "image_folder",
+                            "path": sample_path,
+                            "frames": sorted_img_paths,
+                            "label": label,
+                            "subject": clip_subj
+                        })
+                    else:
+                        for start in range(0, n_frames - req_len + 1, stride):
+                            sub_names = sorted_img_names[start : start + req_len]
+                            sub_paths = [os.path.join(root, fn) for fn in sub_names]
+                            self.samples.append({
+                                "type": "image_folder",
+                                "path": f"{sample_path}_sub_{start}",
+                                "frames": sub_paths,
+                                "label": label,
+                                "subject": clip_subj
+                            })
 
         if len(self.samples) == 0:
             raise ValueError(

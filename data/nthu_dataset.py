@@ -83,9 +83,7 @@ class NTHUDriverDrowsinessDataset(Dataset):
             )
 
         for root, dirs, files in os.walk(self.root_dir):
-            subj = self._match_subject(root)
-            if self.subjects and (subj not in self.subjects) and not any(s in root for s in self.subjects):
-                continue
+            # Check subject at file/clip level rather than skipping directory prematurely
 
             # 1. Check for video files in current directory
             video_files = [f for f in files if f.lower().endswith(self.VALID_VIDEO_EXTS)]

@@ -21,21 +21,22 @@ from models.backbones.inceptionv3 import InceptionV3Baseline
 from data.nthu_dataset import build_nthu_dataloaders
 from evaluation.metrics import compute_comprehensive_metrics
 from generate_xai_samples import generate_xai_plots
+from training.losses import FocalLoss
 
 
-def instantiate_model(model_name: str, num_classes: int = 5, embed_dim: int = 256, sequence_length: int = 16):
+def instantiate_model(model_name: str, num_classes: int = 5, embed_dim: int = 256, sequence_length: int = 16, pretrained: bool = True):
     """Instantiate model based on model keyword name."""
     name_clean = model_name.lower()
     if name_clean in ["sota", "sota_pipeline", "drowsiness_pipeline"]:
         return LowLightDrowsinessPipeline(num_classes=num_classes, embed_dim=embed_dim, sequence_length=sequence_length)
     elif name_clean in ["resnet", "resnet50", "resnet-50"]:
-        return ResNet50Baseline(num_classes=num_classes, pretrained=True)
+        return ResNet50Baseline(num_classes=num_classes, pretrained=pretrained)
     elif name_clean in ["vit", "vit_base", "vit-base"]:
-        return ViTBaseline(num_classes=num_classes, pretrained=False)
+        return ViTBaseline(num_classes=num_classes, pretrained=pretrained)
     elif name_clean in ["swin", "swin_tiny", "swin-tiny"]:
-        return SwinTransformerBaseline(num_classes=num_classes, pretrained=False)
+        return SwinTransformerBaseline(num_classes=num_classes, pretrained=pretrained)
     elif name_clean in ["inception", "inceptionv3", "inception_v3"]:
-        return InceptionV3Baseline(num_classes=num_classes, pretrained=False)
+        return InceptionV3Baseline(num_classes=num_classes, pretrained=pretrained)
     else:
         raise ValueError(f"Unknown model name: {model_name}. Options: ['sota', 'resnet50', 'vit', 'swin', 'inception']")
 
@@ -69,10 +70,11 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
         model_name=model_name,
         num_classes=data_cfg["num_classes"],
         embed_dim=cfg["pipeline"]["region_vit"]["embed_dim"],
-        sequence_length=data_cfg["sequence_length"]
+        sequence_length=data_cfg["sequence_length"],
+        pretrained=True
     ).to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = FocalLoss(gamma=2.0)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=float(train_cfg["learning_rate"]),

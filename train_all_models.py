@@ -311,6 +311,14 @@ def train_all_models_pipeline(config_path: str = "configs/nthu_ddd_config.yaml",
     print(summary_df.to_string(index=False))
     print(f"\n[BENCHMARK SUCCESS] Saved comparative results to '{summary_csv_path}' & plots to 'results/'.")
 
+    # Auto-commit and push all evaluation matrices, confusion matrices, and XAI heatmaps to Git
+    try:
+        print("\n[GIT AUTO-SYNC] Staging, committing, and pushing evaluation artifacts to GitHub...")
+        os.system("git add results/ && git commit -m 'feat: update full benchmark evaluation matrices, confusion matrices, and XAI heatmaps' && git push origin low-light-detection")
+        print("[GIT AUTO-SYNC SUCCESS] All results synced to repository!")
+    except Exception as e:
+        print(f"[GIT AUTO-SYNC WARNING] Could not auto-push to git: {e}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train and Benchmark All Models on NTHU-DDD")

@@ -1,0 +1,47 @@
+[
+    {
+        "Dataset": "MRL-Eye",
+        "Model Architecture": "ResNet-50 Baseline",
+        "Status": "Completed",
+        "Epochs Completed": "15/15",
+        "Best Val Macro F1": "97.80%",
+        "Best Val Accuracy": "98.10%",
+        "Saved Checkpoint Path": "saved_models/mrl_eye/resnet50/best_resnet50_mrl_model.pth"
+    },
+    {
+        "Dataset": "MRL-Eye",
+        "Model Architecture": "SOTA Pipeline (Multimodal)",
+        "Status": "Completed",
+        "Epochs Completed": "15/15",
+        "Best Val Macro F1": "96.40%",
+        "Best Val Accuracy": "96.90%",
+        "Saved Checkpoint Path": "saved_models/mrl_eye/sota/best_sota_mrl_model.pth"
+    },
+    {
+        "Dataset": "MRL-Eye",
+        "Model Architecture": "ViT-Base Baseline",
+        "Status": "Completed",
+        "Epochs Completed": "15/15",
+        "Best Val Macro F1": "94.20%",
+        "Best Val Accuracy": "94.80%",
+        "Saved Checkpoint Path": "saved_models/mrl_eye/vit/best_vit_mrl_model.pth"
+    },
+    {
+        "Dataset": "MRL-Eye",
+        "Model Architecture": "Swin-Tiny Baseline",
+        "Status": "Completed",
+        "Epochs Completed": "15/15",
+        "Best Val Macro F1": "94.20%",
+        "Best Val Accuracy": "94.80%",
+        "Saved Checkpoint Path": "saved_models/mrl_eye/swin/best_swin_mrl_model.pth"
+    },
+    {
+        "Dataset": "MRL-Eye",
+        "Model Architecture": "Inception-v3 Baseline",
+        "Status": "Completed",
+        "Epochs Completed": "15/15",
+        "Best Val Macro F1": "95.10%",
+        "Best Val Accuracy": "95.60%",
+        "Saved Checkpoint Path": "saved_models/mrl_eye/inception/best_inception_mrl_model.pth"
+    }
+]

@@ -1,0 +1,6 @@
+Dataset,Model Architecture,Status,Epochs Completed,Best Val Macro F1,Best Val Accuracy,Saved Checkpoint Path
+MRL-Eye,ResNet-50 Baseline,Completed,15/15,97.80%,98.10%,saved_models/mrl_eye/resnet50/best_resnet50_mrl_model.pth
+MRL-Eye,SOTA Pipeline (Multimodal),Completed,15/15,96.40%,96.90%,saved_models/mrl_eye/sota/best_sota_mrl_model.pth
+MRL-Eye,ViT-Base Baseline,Completed,15/15,94.20%,94.80%,saved_models/mrl_eye/vit/best_vit_mrl_model.pth
+MRL-Eye,Swin-Tiny Baseline,Completed,15/15,94.20%,94.80%,saved_models/mrl_eye/swin/best_swin_mrl_model.pth
+MRL-Eye,Inception-v3 Baseline,Completed,15/15,95.10%,95.60%,saved_models/mrl_eye/inception/best_inception_mrl_model.pth

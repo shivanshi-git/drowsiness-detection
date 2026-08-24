@@ -1,0 +1,7 @@
+{
+    "Accuracy": 0.853,
+    "Macro_Precision": 0.48200000000000004,
+    "Macro_Recall": 0.441,
+    "Macro_F1": 0.4603,
+    "Weighted_F1": 0.8109999999999999
+}

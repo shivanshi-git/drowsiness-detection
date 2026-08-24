@@ -1,0 +1,5 @@
+Model Architecture,Status,Epochs Completed,Accuracy,Macro_Precision,Macro_Recall,Macro_F1,Weighted_F1
+RESNET50,Completed,30/30,86.6,72.1,68.8,70.3,84.2
+SOTA,Completed,30/30,85.3,66.8,62.1,64.35,82.5
+VIT,Completed,30/30,85.3,48.2,44.1,46.03,81.1
+SWIN,Completed,30/30,85.3,48.2,44.1,46.03,81.1

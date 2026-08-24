@@ -179,6 +179,18 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
 
     final_metrics = compute_comprehensive_metrics(val_targets, val_preds, val_probs)
 
+    # Save per-model evaluation metrics CSV & JSON
+    metrics_summary = {
+        "Accuracy": float(final_metrics.get("accuracy", 0.0)),
+        "Macro_Precision": float(final_metrics.get("macro_precision", 0.0)),
+        "Macro_Recall": float(final_metrics.get("macro_recall", 0.0)),
+        "Macro_F1": float(final_metrics.get("macro_f1", 0.0)),
+        "Weighted_F1": float(final_metrics.get("weighted_f1", 0.0)),
+    }
+    pd.DataFrame([metrics_summary]).to_csv(f"results/evaluation_metrics_{model_name}.csv", index=False)
+    with open(f"results/evaluation_metrics_{model_name}.json", "w") as f:
+        json.dump(metrics_summary, f, indent=4)
+
     # Save per-model confusion matrix & ROC curve
     from evaluation.roc_auc import plot_and_save_roc_curve
     from sklearn.metrics import confusion_matrix

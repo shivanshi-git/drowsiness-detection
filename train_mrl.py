@@ -218,11 +218,15 @@ def train_all_mrl_models(epochs: int = 15):
     print("======================================================================")
     print(summary_df.to_string(index=False))
 
-    # Auto-commit and push all MRL evaluation matrices, confusion matrices, and ROC plots to Git
+    # Auto-generate FINAL_BENCHMARK_REPORT.md and sync to Git
     try:
-        print("\n[GIT AUTO-SYNC] Staging, committing, and pushing MRL evaluation artifacts to GitHub...")
-        os.system("git add results/ && git commit -m 'feat: update MRL Eye dataset benchmark matrices, confusion matrices, and ROC curves' && git push origin low-light-detection")
-        print("[GIT AUTO-SYNC SUCCESS] All MRL Eye results synced to repository!")
+        print("\n[REPORT GENERATOR] Generating updated FINAL_BENCHMARK_REPORT.md...")
+        report_cmd = ".venv/bin/python3 /home/altos/.gemini/antigravity-ide/brain/4504e98f-75a0-436b-9ffc-af68bd278cc7/scratch/generate_final_benchmark_report.py"
+        os.system(report_cmd)
+
+        print("\n[GIT AUTO-SYNC] Staging, committing, and pushing FINAL_BENCHMARK_REPORT.md and MRL evaluation artifacts to GitHub...")
+        os.system("git add FINAL_BENCHMARK_REPORT.md results/ && git commit -m 'feat: auto-update FINAL_BENCHMARK_REPORT.md and MRL evaluation matrices after training' && git push origin low-light-detection")
+        print("[GIT AUTO-SYNC SUCCESS] FINAL_BENCHMARK_REPORT.md & MRL results synced to GitHub!")
     except Exception as e:
         print(f"[GIT AUTO-SYNC WARNING] Could not auto-push to git: {e}")
 

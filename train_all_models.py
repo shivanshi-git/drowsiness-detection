@@ -311,11 +311,15 @@ def train_all_models_pipeline(config_path: str = "configs/nthu_ddd_config.yaml",
     print(summary_df.to_string(index=False))
     print(f"\n[BENCHMARK SUCCESS] Saved comparative results to '{summary_csv_path}' & plots to 'results/'.")
 
-    # Auto-commit and push all evaluation matrices, confusion matrices, and XAI heatmaps to Git
+    # Auto-generate FINAL_BENCHMARK_REPORT.md and sync to Git
     try:
-        print("\n[GIT AUTO-SYNC] Staging, committing, and pushing evaluation artifacts to GitHub...")
-        os.system("git add results/ && git commit -m 'feat: update full benchmark evaluation matrices, confusion matrices, and XAI heatmaps' && git push origin low-light-detection")
-        print("[GIT AUTO-SYNC SUCCESS] All results synced to repository!")
+        print("\n[REPORT GENERATOR] Generating updated FINAL_BENCHMARK_REPORT.md...")
+        report_cmd = ".venv/bin/python3 /home/altos/.gemini/antigravity-ide/brain/4504e98f-75a0-436b-9ffc-af68bd278cc7/scratch/generate_final_benchmark_report.py"
+        os.system(report_cmd)
+
+        print("\n[GIT AUTO-SYNC] Staging, committing, and pushing FINAL_BENCHMARK_REPORT.md and all evaluation matrices to GitHub...")
+        os.system("git add FINAL_BENCHMARK_REPORT.md results/ && git commit -m 'feat: auto-update FINAL_BENCHMARK_REPORT.md and evaluation matrices after training' && git push origin low-light-detection")
+        print("[GIT AUTO-SYNC SUCCESS] FINAL_BENCHMARK_REPORT.md & all results synced to GitHub!")
     except Exception as e:
         print(f"[GIT AUTO-SYNC WARNING] Could not auto-push to git: {e}")
 

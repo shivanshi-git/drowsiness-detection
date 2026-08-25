@@ -1,0 +1,49 @@
+Chained Training Benchmark Queue Successfully Configured & Running 🚀
+The training pipeline is configured in a strict sequential queue on the NVIDIA GB10 GPU (cuda:0) with no training from scratch (pre-loading existing weights for every model across both datasets):
+
+1️⃣ Phase 1: NTHU-DDD Dataset (Currently Running)
+The following 5 architectures are training for 30 epochs on NTHU-DDD:
+
+SOTA Pipeline (Multimodal): Pre-loaded from 
+
+saved_models/sota/best_sota_model.pth
+ResNet-50 Baseline: Pre-loading from 
+
+saved_models/resnet50/best_resnet50_model.pth
+ViT-Base Baseline: Pre-loading from 
+
+saved_models/vit/best_vit_model.pth
+Swin-Tiny Baseline: Pre-loading from 
+
+saved_models/swin/best_swin_model.pth
+Inception-v3 Baseline: Pre-loading from 
+
+saved_models/inception/best_inception_model.pth
+2️⃣ Phase 2: MRL-Eye Dataset (Queued & Auto-Starts Next)
+Immediately after Phase 1 finishes, the pipeline will automatically trigger MRL-Eye training for 30 epochs on GPU:
+
+SOTA Pipeline (Multimodal): Pre-loading from 
+
+saved_models/mrl_eye/sota/best_sota_mrl_model.pth
+ResNet-50 Baseline: Pre-loading from 
+
+saved_models/mrl_eye/resnet50/best_resnet50_mrl_model.pth
+ViT-Base Baseline: Pre-loading from 
+
+saved_models/mrl_eye/vit/best_vit_mrl_model.pth
+Swin-Tiny Baseline: Pre-loading from 
+
+saved_models/mrl_eye/swin/best_swin_mrl_model.pth
+Inception-v3 Baseline: Pre-loading from 
+
+saved_models/mrl_eye/inception/best_inception_mrl_model.pth
+🔄 Auto-Report & GitHub Sync
+Upon completion of both benchmark suites, the system will automatically:
+
+Re-generate 
+
+FINAL_BENCHMARK_REPORT.md
+.
+Export all evaluation metrics, confusion matrices, and ROC curves to results/.
+Commit and push all updated benchmark artifacts to GitHub (shivanshi-git/drowsiness-detection, branch low-light-detection).
+The background task is active. I will notify you as execution progresses.

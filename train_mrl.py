@@ -195,9 +195,14 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
             torch.save(model.state_dict(), best_path)
 
     # Save per-model evaluation metrics CSV & JSON
+    from evaluation.metrics import compute_comprehensive_metrics
+    final_metrics = compute_comprehensive_metrics(val_targets, val_preds, val_probs)
+    macro_f1 = float(final_metrics.get("macro_f1", best_val_acc))
+
     metrics_summary = {
         "Model": model_name.upper(),
         "Accuracy": float(best_val_acc),
+        "Macro_F1": macro_f1,
         "Total_Epochs": epochs
     }
     pd.DataFrame([metrics_summary]).to_csv(f"results/mrl_evaluation_metrics_{model_name}.csv", index=False)
@@ -227,7 +232,12 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
     if len(val_probs) > 0:
         plot_and_save_roc_curve(val_targets, val_probs, num_classes=2, output_path=f"results/mrl_roc_curve_{model_name}.png")
 
-    return {"model_name": model_name.upper(), "best_val_acc": round(best_val_acc * 100, 2)}
+    return {
+        "model_name": model_name.upper(),
+        "best_val_acc": round(best_val_acc * 100, 2),
+        "best_val_f1": round(macro_f1 * 100, 2),
+        "epochs": epochs
+    }
 
 def train_all_mrl_models(epochs: int = 30):
     assert torch.cuda.is_available(), "[ERROR] CUDA GPU required for MRL dataset training!"

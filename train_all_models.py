@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 import matplotlib.pyplot as plt
 
 # Model Architectures
@@ -65,7 +65,6 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
         val_subjects=splits.get("val_subjects", None)
     )
 
-    # 2. Instantiate Model & Optimizer
     model = instantiate_model(
         model_name=model_name,
         num_classes=data_cfg["num_classes"],
@@ -73,6 +72,32 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
         sequence_length=data_cfg["sequence_length"],
         pretrained=True
     ).to(device)
+    # Pre-load existing checkpoint weights to avoid training from scratch
+    possible_paths = [
+        os.path.join(save_dir, f"best_{model_name}_model.pth"),
+        os.path.join("saved_models", f"best_{model_name}_model.pth"),
+        os.path.join("saved_models", f"{model_name}_best_model.pth"),
+        os.path.join("saved_models", model_name, f"best_{model_name}_model.pth"),
+    ]
+    preloaded = False
+    for p in possible_paths:
+        if os.path.exists(p):
+            print(f"[PRELOAD SUCCESS] Loading existing pre-trained weights for '{model_name}' from: {p}")
+            try:
+                ckpt = torch.load(p, map_location=device)
+                if isinstance(ckpt, dict) and "model_state" in ckpt:
+                    model.load_state_dict(ckpt["model_state"], strict=False)
+                elif isinstance(ckpt, dict) and "state_dict" in ckpt:
+                    model.load_state_dict(ckpt["state_dict"], strict=False)
+                else:
+                    model.load_state_dict(ckpt, strict=False)
+                print(f"[PRELOAD SUCCESS] Loaded existing weights for '{model_name}'. No training from scratch.")
+                preloaded = True
+                break
+            except Exception as e:
+                print(f"[PRELOAD WARN] Could not load checkpoint {p}: {e}")
+    if not preloaded:
+        print(f"[INFO] Initialized '{model_name}' with ImageNet backbone pre-trained weights.")
 
     criterion = FocalLoss(gamma=2.0)
     optimizer = torch.optim.AdamW(
@@ -85,7 +110,7 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
         T_max=num_epochs,
         eta_min=float(train_cfg["min_lr"])
     )
-    scaler = GradScaler(enabled=train_cfg["mixed_precision"])
+    scaler = GradScaler('cuda', enabled=train_cfg["mixed_precision"])
 
     best_val_f1 = 0.0
     history = []
@@ -104,7 +129,7 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
 
             optimizer.zero_grad()
 
-            with autocast(enabled=train_cfg["mixed_precision"]):
+            with autocast('cuda', enabled=train_cfg["mixed_precision"]):
                 if is_sota:
                     out = model(video, flow)
                 else:
@@ -137,7 +162,7 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
                 flow = batch["flow"].to(device)
                 labels = batch["label"].to(device)
 
-                with autocast(enabled=train_cfg["mixed_precision"]):
+                with autocast('cuda', enabled=train_cfg["mixed_precision"]):
                     if is_sota:
                         out = model(video, flow)
                     else:
@@ -314,7 +339,7 @@ def train_all_models_pipeline(config_path: str = "configs/nthu_ddd_config.yaml",
     # Auto-generate FINAL_BENCHMARK_REPORT.md and sync to Git
     try:
         print("\n[REPORT GENERATOR] Generating updated FINAL_BENCHMARK_REPORT.md...")
-        report_cmd = ".venv/bin/python3 /home/altos/.gemini/antigravity-ide/brain/4504e98f-75a0-436b-9ffc-af68bd278cc7/scratch/generate_final_benchmark_report.py"
+        report_cmd = ".venv/bin/python utils/generate_final_benchmark_report.py"
         os.system(report_cmd)
 
         print("\n[GIT AUTO-SYNC] Staging, committing, and pushing FINAL_BENCHMARK_REPORT.md and all evaluation matrices to GitHub...")

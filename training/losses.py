@@ -81,5 +81,9 @@ class MultimodalDrowsinessLoss(nn.Module):
         # 3. Binary fatigue consistency (optional auxiliary head)
         if fatigue_score is not None:
             binary_label = (targets >= 1).float().unsqueeze(1)  # 0=normal, 1=any drowsy
-            loss = loss + 0.2 * self.bce(fatigue_score, binary_label)
+            with torch.cuda.amp.autocast(enabled=False):
+                loss = loss + 0.2 * F.binary_cross_entropy(
+                    fatigue_score.float().clamp(1e-7, 1.0 - 1e-7),
+                    binary_label.float()
+                )
         return loss

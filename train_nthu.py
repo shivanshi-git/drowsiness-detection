@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 import matplotlib.pyplot as plt
 
 from models.drowsiness_pipeline import LowLightDrowsinessPipeline
@@ -200,7 +200,7 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epoch
         progress = float(step - warmup_steps) / max(1, total_steps - warmup_steps)
         return max(0.01, 0.5 * (1.0 + math.cos(math.pi * progress)))
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-    scaler = GradScaler(enabled=use_amp)
+    scaler = GradScaler('cuda', enabled=use_amp)
 
     # 6. EMA model
     ema_model = copy.deepcopy(model).to(device)
@@ -264,7 +264,7 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epoch
                 )
 
             optimizer.zero_grad()
-            with autocast(enabled=use_amp):
+            with autocast('cuda', enabled=use_amp):
                 out    = model(video, flow)
                 logits = out["logits"]
                 fatigue = out.get("fatigue_score", None)
@@ -306,7 +306,7 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epoch
                 flow   = batch["flow"].to(device)
                 labels = batch["label"].to(device)
 
-                with autocast(enabled=use_amp):
+                with autocast('cuda', enabled=use_amp):
                     out  = ema_model(video, flow)
                     loss = criterion(out["logits"], labels)
 

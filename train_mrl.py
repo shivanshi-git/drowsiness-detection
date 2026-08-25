@@ -77,11 +77,14 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
+    model = build_mrl_model(model_name, num_classes=2).to(device)
+
     # Pre-load existing checkpoint weights to avoid training from scratch
     possible_paths = [
         os.path.join(save_dir, f"best_{model_name}_mrl_model.pth"),
         os.path.join("saved_models", "mrl_eye", f"best_{model_name}_mrl_model.pth"),
         os.path.join("saved_models", "mrl_eye", model_name, f"best_{model_name}_mrl_model.pth"),
+        os.path.join("saved_models", f"best_{model_name}_mrl_model.pth"),
     ]
     preloaded = False
     for p in possible_paths:

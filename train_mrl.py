@@ -77,10 +77,36 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
-    model = build_mrl_model(model_name, num_classes=2).to(device)
+    # Pre-load existing checkpoint weights to avoid training from scratch
+    possible_paths = [
+        os.path.join(save_dir, f"best_{model_name}_mrl_model.pth"),
+        os.path.join("saved_models", "mrl_eye", f"best_{model_name}_mrl_model.pth"),
+        os.path.join("saved_models", "mrl_eye", model_name, f"best_{model_name}_mrl_model.pth"),
+    ]
+    preloaded = False
+    for p in possible_paths:
+        if os.path.exists(p):
+            print(f"[PRELOAD SUCCESS] Loading existing pre-trained MRL weights for '{model_name}' from: {p}")
+            try:
+                ckpt = torch.load(p, map_location=device)
+                if isinstance(ckpt, dict) and "model_state" in ckpt:
+                    model.load_state_dict(ckpt["model_state"], strict=False)
+                elif isinstance(ckpt, dict) and "state_dict" in ckpt:
+                    model.load_state_dict(ckpt["state_dict"], strict=False)
+                else:
+                    model.load_state_dict(ckpt, strict=False)
+                print(f"[PRELOAD SUCCESS] Loaded existing MRL weights for '{model_name}'. No training from scratch.")
+                preloaded = True
+                break
+            except Exception as e:
+                print(f"[PRELOAD WARN] Could not load MRL checkpoint {p}: {e}")
+    if not preloaded:
+        print(f"[INFO] Initialized '{model_name}' with default backbone pre-trained weights.")
+
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    scaler = torch.amp.GradScaler('cuda')
 
     best_val_acc = 0.0
     history = []
@@ -96,18 +122,20 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
             imgs, labels = imgs.to(device), labels.to(device)
             optimizer.zero_grad()
 
-            if is_sota:
-                b = imgs.size(0)
-                video_seq = imgs.unsqueeze(1).repeat(1, 16, 1, 1, 1)
-                flow_seq = torch.zeros(b, 16, 2, 112, 112, device=device)
-                out = model(video_seq, flow_seq)
-                outputs = out["logits"]
-            else:
-                outputs = model(imgs)
+            with torch.amp.autocast('cuda'):
+                if is_sota:
+                    b = imgs.size(0)
+                    video_seq = imgs.unsqueeze(1).repeat(1, 16, 1, 1, 1)
+                    flow_seq = torch.zeros(b, 16, 2, 112, 112, device=device)
+                    out = model(video_seq, flow_seq)
+                    outputs = out["logits"]
+                else:
+                    outputs = model(imgs)
+                loss = criterion(outputs, labels)
 
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             running_loss += loss.item() * imgs.size(0)
             preds = torch.argmax(outputs, dim=1)
@@ -127,16 +155,17 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
         with torch.no_grad():
             for imgs, labels in val_loader:
                 imgs, labels = imgs.to(device), labels.to(device)
-                if is_sota:
-                    b = imgs.size(0)
-                    video_seq = imgs.unsqueeze(1).repeat(1, 16, 1, 1, 1)
-                    flow_seq = torch.zeros(b, 16, 2, 112, 112, device=device)
-                    out = model(video_seq, flow_seq)
-                    outputs = out["logits"]
-                else:
-                    outputs = model(imgs)
+                with torch.amp.autocast('cuda'):
+                    if is_sota:
+                        b = imgs.size(0)
+                        video_seq = imgs.unsqueeze(1).repeat(1, 16, 1, 1, 1)
+                        flow_seq = torch.zeros(b, 16, 2, 112, 112, device=device)
+                        out = model(video_seq, flow_seq)
+                        outputs = out["logits"]
+                    else:
+                        outputs = model(imgs)
 
-                loss = criterion(outputs, labels)
+                    loss = criterion(outputs, labels)
                 val_loss += loss.item() * imgs.size(0)
                 probs = torch.softmax(outputs, dim=1).cpu().numpy()
                 preds = torch.argmax(outputs, dim=1).cpu().numpy()
@@ -197,9 +226,10 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
 
     return {"model_name": model_name.upper(), "best_val_acc": round(best_val_acc * 100, 2)}
 
-def train_all_mrl_models(epochs: int = 15):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(f"[INFO] Using Device for MRL Benchmark: {device}")
+def train_all_mrl_models(epochs: int = 30):
+    assert torch.cuda.is_available(), "[ERROR] CUDA GPU required for MRL dataset training!"
+    device = torch.device("cuda:0")
+    print(f"[INFO] Using Device for MRL Benchmark: {torch.cuda.get_device_name(0)}")
     
     models_list = ["sota", "resnet50", "vit", "swin", "inception"]
     results = []
@@ -221,7 +251,7 @@ def train_all_mrl_models(epochs: int = 15):
     # Auto-generate FINAL_BENCHMARK_REPORT.md and sync to Git
     try:
         print("\n[REPORT GENERATOR] Generating updated FINAL_BENCHMARK_REPORT.md...")
-        report_cmd = ".venv/bin/python3 /home/altos/.gemini/antigravity-ide/brain/4504e98f-75a0-436b-9ffc-af68bd278cc7/scratch/generate_final_benchmark_report.py"
+        report_cmd = ".venv/bin/python utils/generate_final_benchmark_report.py"
         os.system(report_cmd)
 
         print("\n[GIT AUTO-SYNC] Staging, committing, and pushing FINAL_BENCHMARK_REPORT.md and MRL evaluation artifacts to GitHub...")
@@ -231,4 +261,8 @@ def train_all_mrl_models(epochs: int = 15):
         print(f"[GIT AUTO-SYNC WARNING] Could not auto-push to git: {e}")
 
 if __name__ == "__main__":
-    train_all_mrl_models()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs for MRL models")
+    args = parser.parse_args()
+    train_all_mrl_models(epochs=args.epochs)

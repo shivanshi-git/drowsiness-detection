@@ -128,8 +128,10 @@ def _mixup_batch(video, flow, labels, alpha=0.4, device="cuda"):
 
 
 def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epochs_override: int = None):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    print(f"[INFO] Training on: {torch.cuda.get_device_name(0) if device.type == 'cuda' else 'CPU'}")
+    if not torch.cuda.is_available():
+        raise RuntimeError("[STRICT GPU REQUIREMENT ERROR] CUDA GPU is not available for training.")
+    device = torch.device("cuda:0")
+    print(f"[INFO] Strictly using GPU: {torch.cuda.get_device_name(0)}")
 
     # Load configuration
     with open(config_path, "r") as f:
@@ -214,8 +216,11 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epoch
 
     # Auto-Resume Checkpoint Logic
     latest_ckpt_path = os.path.join(save_dir, "checkpoint_latest.pth")
+    sota_best_path = os.path.join(save_dir, "best_sota_model.pth")
+    alt_sota_best_path = os.path.join(save_dir, "sota", "best_sota_model.pth")
+
     if os.path.exists(latest_ckpt_path):
-        print(f"[INFO] Resuming from: {latest_ckpt_path}")
+        print(f"[INFO] Resuming training from full checkpoint: {latest_ckpt_path}")
         ckpt = torch.load(latest_ckpt_path, map_location=device)
         model.load_state_dict(ckpt["model_state"])
         ema_model.load_state_dict(ckpt.get("ema_state", ckpt["model_state"]))
@@ -228,7 +233,14 @@ def train_sota_pipeline(config_path: str = "configs/nthu_ddd_config.yaml", epoch
         global_step   = ckpt.get("global_step",  0)
         history       = ckpt.get("history", [])
         no_improve    = ckpt.get("no_improve", 0)
-        print(f"[INFO] Resumed epoch {start_epoch}/{num_epochs}  Best Acc={best_val_acc*100:.2f}%")
+        print(f"[INFO] Resumed epoch {start_epoch}/{num_epochs} | Best Acc={best_val_acc*100:.2f}%")
+    else:
+        preload_path = sota_best_path if os.path.exists(sota_best_path) else (alt_sota_best_path if os.path.exists(alt_sota_best_path) else None)
+        if preload_path:
+            print(f"[INFO] Pre-loading weights from existing best model: {preload_path}")
+            ckpt_state = torch.load(preload_path, map_location=device)
+            model.load_state_dict(ckpt_state)
+            ema_model.load_state_dict(ckpt_state)
 
     print("\n--- Starting Training ---")
     val_preds, val_targets, val_probs = [], [], []

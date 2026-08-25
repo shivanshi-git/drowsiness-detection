@@ -19,9 +19,29 @@ class RetinaFaceDetector:
         self.eye_size = eye_size
         self.mouth_size = mouth_size
         
-        # Load OpenCV Haar cascade as fallback fast local detector
-        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        self.eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+        self._face_cascade = None
+        self._eye_cascade = None
+
+    @property
+    def face_cascade(self):
+        if self._face_cascade is None:
+            xml = getattr(cv2.data, "haarcascades", "") + "haarcascade_frontalface_default.xml"
+            self._face_cascade = cv2.CascadeClassifier(xml)
+        return self._face_cascade
+
+    @property
+    def eye_cascade(self):
+        if self._eye_cascade is None:
+            xml = getattr(cv2.data, "haarcascades", "") + "haarcascade_eye.xml"
+            self._eye_cascade = cv2.CascadeClassifier(xml)
+        return self._eye_cascade
+
+    def __deepcopy__(self, memo):
+        return RetinaFaceDetector(
+            confidence_threshold=self.conf_thresh,
+            eye_size=self.eye_size,
+            mouth_size=self.mouth_size
+        )
 
     def detect_and_crop(self, frame_bgr: np.ndarray) -> dict:
         """

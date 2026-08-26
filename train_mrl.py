@@ -239,25 +239,43 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
         "epochs": epochs
     }
 
-def train_all_mrl_models(epochs: int = 30):
+def train_all_mrl_models(epochs: int = 30, models_list: list = None):
     assert torch.cuda.is_available(), "[ERROR] CUDA GPU required for MRL dataset training!"
     device = torch.device("cuda:0")
     print(f"[INFO] Using Device for MRL Benchmark: {torch.cuda.get_device_name(0)}")
     
-    models_list = ["sota", "resnet50", "vit", "swin", "inception"]
+    if not models_list:
+        models_list = ["sota", "resnet50", "vit", "swin", "inception"]
+    
     results = []
 
     for name in models_list:
         res = train_single_mrl_model(name, epochs=epochs, device=device)
         results.append(res)
 
-    summary_df = pd.DataFrame(results)
+    # Merge with existing results if available
+    json_path = "results/mrl_benchmark_comparison.json"
+    existing_data = []
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r") as f:
+                existing_data = json.load(f)
+        except Exception:
+            existing_data = []
+    
+    merged_dict = {item["model_name"]: item for item in existing_data}
+    for item in results:
+        merged_dict[item["model_name"]] = item
+    
+    merged_results = list(merged_dict.values())
+
+    summary_df = pd.DataFrame(merged_results)
     summary_df.to_csv("results/mrl_benchmark_comparison.csv", index=False)
     with open("results/mrl_benchmark_comparison.json", "w") as f:
-        json.dump(results, f, indent=4)
+        json.dump(merged_results, f, indent=4)
 
     print("\n======================================================================")
-    print("      MRL EYE DATASET BENCHMARK COMPARISON Across All Models          ")
+    print("      MRL EYE DATASET BENCHMARK COMPARISON Across Evaluated Models    ")
     print("======================================================================")
     print(summary_df.to_string(index=False))
 
@@ -277,5 +295,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs for MRL models")
+    parser.add_argument("--models", nargs="+", default=["resnet50", "vit", "swin", "inception"], help="List of models to train (e.g. resnet50 vit swin inception sota)")
     args = parser.parse_args()
-    train_all_mrl_models(epochs=args.epochs)
+    train_all_mrl_models(epochs=args.epochs, models_list=args.models)
+

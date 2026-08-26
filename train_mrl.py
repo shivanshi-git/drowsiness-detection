@@ -43,11 +43,23 @@ def build_mrl_model(model_name: str, num_classes: int = 2):
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
-def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 64, lr: float = 3e-4, device=None):
+def train_single_mrl_model(model_name: str, epochs: int = 30, batch_size: int = 128, lr: float = 3e-4, device=None):
     print(f"\n======================================================================")
-    print(f"       STARTING MRL EYE TRAINING FOR MODEL: {model_name.upper()}")
+    print(f"       STARTING HIGH-SPEED MRL TRAINING FOR MODEL: {model_name.upper()}")
     print(f"======================================================================")
     
+    # 1. Hardware Optimization Flags
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+        torch.set_float32_matmul_precision('high')
+
+    # Optimized batch size per architecture
+    name_clean = model_name.lower()
+    if "resnet" in name_clean or "inception" in name_clean:
+        opt_batch_size = 256
+    else:
+        opt_batch_size = 128
+
     mrl_dir = "MRL/data"
     train_dir = os.path.join(mrl_dir, "train")
     val_dir = os.path.join(mrl_dir, "val")
@@ -55,7 +67,7 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs("results", exist_ok=True)
 
-    img_size = 299 if "inception" in model_name.lower() else 224
+    img_size = 299 if "inception" in name_clean else 224
 
     transform_train = transforms.Compose([
         transforms.Resize((img_size, img_size)),
@@ -74,22 +86,39 @@ def train_single_mrl_model(model_name: str, epochs: int = 15, batch_size: int = 
     train_dataset = datasets.ImageFolder(train_dir, transform=transform_train)
     val_dataset = datasets.ImageFolder(val_dir, transform=transform_val)
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=opt_batch_size, shuffle=True, 
+        num_workers=8, pin_memory=True, persistent_workers=True
+    )
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset, batch_size=opt_batch_size, shuffle=False, 
+        num_workers=8, pin_memory=True, persistent_workers=True
+    )
 
     model = build_mrl_model(model_name, num_classes=2).to(device)
 
-    # Pre-load existing checkpoint weights to avoid training from scratch
+    # Pre-load existing checkpoint weights or exact epoch state
+    last_ckpt_path = os.path.join(save_dir, f"last_{model_name}_mrl_checkpoint.pth")
     possible_paths = [
+        last_ckpt_path,
         os.path.join(save_dir, f"best_{model_name}_mrl_model.pth"),
         os.path.join("saved_models", "mrl_eye", f"best_{model_name}_mrl_model.pth"),
         os.path.join("saved_models", "mrl_eye", model_name, f"best_{model_name}_mrl_model.pth"),
         os.path.join("saved_models", f"best_{model_name}_mrl_model.pth"),
     ]
+    
+    start_epoch = 1
+    best_val_acc = 0.0
     preloaded = False
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    scaler = torch.amp.GradScaler('cuda')
+
     for p in possible_paths:
         if os.path.exists(p):
-            print(f"[PRELOAD SUCCESS] Loading existing pre-trained MRL weights for '{model_name}' from: {p}")
+            print(f"[PRELOAD SUCCESS] Loading checkpoint state for '{model_name}' from: {p}")
             try:
                 ckpt = torch.load(p, map_location=device)
                 if isinstance(ckpt, dict) and "model_state" in ckpt:

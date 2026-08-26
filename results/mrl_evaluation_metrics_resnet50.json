@@ -1,0 +1,6 @@
+{
+    "Model": "RESNET50",
+    "Accuracy": 0.9915194346289753,
+    "Macro_F1": 0.9912235371660889,
+    "Total_Epochs": 30
+}

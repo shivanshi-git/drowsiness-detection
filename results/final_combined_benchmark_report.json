@@ -1,7 +1,7 @@
 [
     {
         "Dataset": "NTHU-DDD",
-        "Model Architecture": "ResNet-50 Baseline",
+        "Model Architecture": "RESNET50",
         "Status": "Completed",
         "Epochs Completed": "30/30",
         "Best Val Macro F1": "70.30%",
@@ -10,7 +10,7 @@
     },
     {
         "Dataset": "NTHU-DDD",
-        "Model Architecture": "SOTA Pipeline (Multimodal)",
+        "Model Architecture": "SOTA",
         "Status": "Completed",
         "Epochs Completed": "30/30",
         "Best Val Macro F1": "64.35%",
@@ -19,7 +19,7 @@
     },
     {
         "Dataset": "NTHU-DDD",
-        "Model Architecture": "ViT-Base Baseline",
+        "Model Architecture": "VIT",
         "Status": "Completed",
         "Epochs Completed": "30/30",
         "Best Val Macro F1": "46.03%",
@@ -28,7 +28,7 @@
     },
     {
         "Dataset": "NTHU-DDD",
-        "Model Architecture": "Swin-Tiny Baseline",
+        "Model Architecture": "SWIN",
         "Status": "Completed",
         "Epochs Completed": "30/30",
         "Best Val Macro F1": "46.03%",
@@ -36,57 +36,48 @@
         "Saved Checkpoint Path": "saved_models/swin/best_swin_model.pth"
     },
     {
-        "Dataset": "NTHU-DDD",
-        "Model Architecture": "Inception-v3 Baseline",
-        "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Best Val Macro F1": "52.40%",
-        "Best Val Accuracy": "84.20%",
-        "Saved Checkpoint Path": "saved_models/inception/best_inception_model.pth"
-    },
-    {
         "Dataset": "MRL-Eye",
-        "Model Architecture": "ResNet-50 Baseline",
-        "Status": "Completed",
-        "Epochs Completed": "15/15",
-        "Best Val Macro F1": "97.80%",
-        "Best Val Accuracy": "98.10%",
+        "Model Architecture": "RESNET50",
+        "Status": "In Progress",
+        "Epochs Completed": "0/30",
+        "Best Val Macro F1": "Pending",
+        "Best Val Accuracy": "Pending",
         "Saved Checkpoint Path": "saved_models/mrl_eye/resnet50/best_resnet50_mrl_model.pth"
     },
     {
         "Dataset": "MRL-Eye",
-        "Model Architecture": "SOTA Pipeline (Multimodal)",
+        "Model Architecture": "SOTA",
         "Status": "Completed",
-        "Epochs Completed": "15/15",
-        "Best Val Macro F1": "96.40%",
-        "Best Val Accuracy": "96.90%",
+        "Epochs Completed": "30/30",
+        "Best Val Macro F1": "98.33%",
+        "Best Val Accuracy": "98.33%",
         "Saved Checkpoint Path": "saved_models/mrl_eye/sota/best_sota_mrl_model.pth"
     },
     {
         "Dataset": "MRL-Eye",
-        "Model Architecture": "ViT-Base Baseline",
-        "Status": "Completed",
-        "Epochs Completed": "15/15",
-        "Best Val Macro F1": "94.20%",
-        "Best Val Accuracy": "94.80%",
+        "Model Architecture": "VIT",
+        "Status": "Queued",
+        "Epochs Completed": "0/30",
+        "Best Val Macro F1": "Pending",
+        "Best Val Accuracy": "Pending",
         "Saved Checkpoint Path": "saved_models/mrl_eye/vit/best_vit_mrl_model.pth"
     },
     {
         "Dataset": "MRL-Eye",
-        "Model Architecture": "Swin-Tiny Baseline",
-        "Status": "Completed",
-        "Epochs Completed": "15/15",
-        "Best Val Macro F1": "94.20%",
-        "Best Val Accuracy": "94.80%",
+        "Model Architecture": "SWIN",
+        "Status": "Queued",
+        "Epochs Completed": "0/30",
+        "Best Val Macro F1": "Pending",
+        "Best Val Accuracy": "Pending",
         "Saved Checkpoint Path": "saved_models/mrl_eye/swin/best_swin_mrl_model.pth"
     },
     {
         "Dataset": "MRL-Eye",
-        "Model Architecture": "Inception-v3 Baseline",
-        "Status": "Completed",
-        "Epochs Completed": "15/15",
-        "Best Val Macro F1": "95.10%",
-        "Best Val Accuracy": "95.60%",
+        "Model Architecture": "INCEPTION",
+        "Status": "Queued",
+        "Epochs Completed": "0/30",
+        "Best Val Macro F1": "Pending",
+        "Best Val Accuracy": "Pending",
         "Saved Checkpoint Path": "saved_models/mrl_eye/inception/best_inception_mrl_model.pth"
     }
 ]

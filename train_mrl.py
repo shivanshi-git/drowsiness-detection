@@ -253,6 +253,21 @@ def train_all_mrl_models(epochs: int = 30, models_list: list = None):
         res = train_single_mrl_model(name, epochs=epochs, device=device)
         results.append(res)
 
+        # Per-model instant artifact generation & GitHub auto-sync
+        try:
+            print(f"\n[MODEL COMPLETE] Instantly extracting prediction matrices, Confusion Matrix PNG, ROC/AUC plot for {name.upper()}...")
+            from evaluate_misclassifications import extract_predictions
+            extract_predictions(model_name=name, device_str="cuda")
+            
+            print(f"[REPORT GENERATOR] Re-generating FINAL_BENCHMARK_REPORT.md for {name.upper()}...")
+            os.system(".venv/bin/python utils/generate_final_benchmark_report.py")
+
+            print(f"[GIT AUTO-SYNC] Pushing completed artifacts for {name.upper()} to GitHub...")
+            os.system(f"git add FINAL_BENCHMARK_REPORT.md results/ && git commit -m 'feat: complete MRL benchmark evaluation, confusion matrix PNG, ROC curve for {name.upper()}' && git push origin low-light-detection")
+            print(f"[GIT AUTO-SYNC SUCCESS] All artifacts for '{name.upper()}' pushed to GitHub!")
+        except Exception as ex:
+            print(f"[AUTO-SYNC WARNING] Could not auto-sync artifacts for {name}: {ex}")
+
     # Merge with existing results if available
     json_path = "results/mrl_benchmark_comparison.json"
     existing_data = []
@@ -281,12 +296,20 @@ def train_all_mrl_models(epochs: int = 30, models_list: list = None):
 
     # Auto-generate FINAL_BENCHMARK_REPORT.md and sync to Git
     try:
+        print("\n[PREDICTION EXTRACTOR] Extracting false and correct predictions for all trained models...")
+        from evaluate_misclassifications import extract_predictions
+        for name in models_list:
+            try:
+                extract_predictions(model_name=name, device_str="cuda")
+            except Exception as ex:
+                print(f"[WARN] Could not extract predictions for '{name}': {ex}")
+
         print("\n[REPORT GENERATOR] Generating updated FINAL_BENCHMARK_REPORT.md...")
         report_cmd = ".venv/bin/python utils/generate_final_benchmark_report.py"
         os.system(report_cmd)
 
         print("\n[GIT AUTO-SYNC] Staging, committing, and pushing FINAL_BENCHMARK_REPORT.md and MRL evaluation artifacts to GitHub...")
-        os.system("git add FINAL_BENCHMARK_REPORT.md results/ && git commit -m 'feat: auto-update FINAL_BENCHMARK_REPORT.md and MRL evaluation matrices after training' && git push origin low-light-detection")
+        os.system("git add FINAL_BENCHMARK_REPORT.md results/ && git commit -m 'feat: auto-update benchmark reports, misclassification & prediction matrices after training' && git push origin low-light-detection")
         print("[GIT AUTO-SYNC SUCCESS] FINAL_BENCHMARK_REPORT.md & MRL results synced to GitHub!")
     except Exception as e:
         print(f"[GIT AUTO-SYNC WARNING] Could not auto-push to git: {e}")

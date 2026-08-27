@@ -1,0 +1,6 @@
+{
+    "Model": "SWIN",
+    "Accuracy": 0.9913427561837456,
+    "Macro_F1": 0.9909877313444775,
+    "Total_Epochs": 30
+}

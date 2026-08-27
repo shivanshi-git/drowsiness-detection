@@ -1,0 +1,2 @@
+Model,Accuracy,Macro_F1,Total_Epochs
+VIT,0.9901060070671378,0.990104254034328,30

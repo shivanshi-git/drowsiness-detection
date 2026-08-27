@@ -53,6 +53,13 @@ This pipeline is specifically designed for **Low-Light Driver Drowsiness Detecti
 
 To solve this, the pipeline includes the **LLFormer (Low-Light Enhancement Transformer)**, which artificially brightens the frames, enhances contrast, and restores facial details *before* they are processed by the spatial and motion streams.
 
+### 📈 Why is MRL-Eye performance higher than NTHU-DDD?
+The final benchmark reports often show >98% accuracy for MRL-Eye, but much lower Macro F1 scores (e.g. ~46-70%) for NTHU-DDD. This massive difference in performance comes down to the fundamental nature of the two datasets:
+1. **Task Complexity**: MRL-Eye is a simple **binary classification** task (Open vs. Closed eye) on closely cropped images. NTHU-DDD is a highly complex **5-class behavioral classification** task (Normal, Slow Blinking, Yawning, Nodding, Eye Closure) on full-body/face frames.
+2. **Static vs. Temporal**: MRL-Eye relies purely on static spatial features. NTHU-DDD requires tracking temporal motion across a sequence of frames (e.g. tracking how long an eye is closed to classify a "slow blink" vs. a normal blink).
+3. **Lighting**: MRL-Eye images are generally clear or neatly captured with IR. NTHU-DDD focuses on extreme low-light/nighttime driving, forcing the model to work incredibly hard just to extract facial features.
+4. **Class Imbalance (The F1 Drop)**: In NTHU-DDD, you will see a massive gap between **Accuracy** (~85%) and **Macro F1** (~46-70%). In a real driving video, the driver is in a "Normal" state 90% of the time. The model achieves high accuracy by guessing "Normal", but the low Macro F1 score reveals the difficulty of correctly identifying rare, critical classes (like Nodding).
+
 ---
 
 ## 📁 Project Structure

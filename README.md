@@ -48,6 +48,11 @@ Drowsiness Classification Head
 Adaptive Real-Time Alarm & Explainable Alert Engine
 ```
 
+### 🌙 Why are the raw images so dark? (The Role of LLFormer)
+This pipeline is specifically designed for **Low-Light Driver Drowsiness Detection** (e.g., driving at night, in a tunnel, or with poor cabin lighting). Because ambient light is extremely low in these scenarios, the raw camera frames appear very dark or "black". 
+
+To solve this, the pipeline includes the **LLFormer (Low-Light Enhancement Transformer)**, which artificially brightens the frames, enhances contrast, and restores facial details *before* they are processed by the spatial and motion streams.
+
 ---
 
 ## 📁 Project Structure

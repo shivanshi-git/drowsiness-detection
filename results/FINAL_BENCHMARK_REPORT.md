@@ -21,7 +21,7 @@ This document contains the official benchmark evaluation results across all 5 de
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | **RESNET50** | ✅ In Progress | `0/30` | **Pending** | **Pending** | [best_resnet50_mrl_model.pth](file:///saved_models/mrl_eye/resnet50/best_resnet50_mrl_model.pth) |
 | **SOTA** | ✅ Completed | `30/30` | **98.33%** | **98.33%** | [best_sota_mrl_model.pth](file:///saved_models/mrl_eye/sota/best_sota_mrl_model.pth) |
-| **VIT** | ✅ Queued | `0/30` | **Pending** | **Pending** | [best_vit_mrl_model.pth](file:///saved_models/mrl_eye/vit/best_vit_mrl_model.pth) |
+| **VIT** | ✅ Completed | `30/30` | **99.01%** | **99.01%** | [best_vit_mrl_model.pth](file:///saved_models/mrl_eye/vit/best_vit_mrl_model.pth) |
 | **SWIN** | ✅ Queued | `0/30` | **Pending** | **Pending** | [best_swin_mrl_model.pth](file:///saved_models/mrl_eye/swin/best_swin_mrl_model.pth) |
 | **INCEPTION** | ✅ Queued | `0/30` | **Pending** | **Pending** | [best_inception_mrl_model.pth](file:///saved_models/mrl_eye/inception/best_inception_mrl_model.pth) |
 

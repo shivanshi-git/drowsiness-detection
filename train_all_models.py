@@ -72,6 +72,7 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
         sequence_length=data_cfg["sequence_length"],
         pretrained=True
     ).to(device)
+    latest_path = os.path.join(save_dir, f"latest_{model_name}_checkpoint.pth")
     # Pre-load existing checkpoint weights to avoid training from scratch
     possible_paths = [
         os.path.join(save_dir, f"best_{model_name}_model.pth"),
@@ -115,8 +116,24 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
     best_val_f1 = 0.0
     history = []
     is_sota = "sota" in model_name.lower() or "pipeline" in model_name.lower()
+    start_epoch = 1
 
-    for epoch in range(1, num_epochs + 1):
+    if os.path.exists(latest_path):
+        print(f"[RESUME] Found latest checkpoint at {latest_path}, resuming training state...")
+        try:
+            ckpt = torch.load(latest_path, map_location=device)
+            model.load_state_dict(ckpt["model_state"])
+            optimizer.load_state_dict(ckpt["optimizer_state"])
+            scheduler.load_state_dict(ckpt["scheduler_state"])
+            scaler.load_state_dict(ckpt["scaler_state"])
+            start_epoch = ckpt["epoch"] + 1
+            best_val_f1 = ckpt["best_val_f1"]
+            history = ckpt.get("history", [])
+            print(f"[RESUME SUCCESS] Resuming from Epoch {start_epoch}")
+        except Exception as e:
+            print(f"[RESUME WARN] Could not resume from {latest_path}: {e}")
+
+    for epoch in range(start_epoch, num_epochs + 1):
         t0 = time.time()
         model.train()
         running_loss = 0.0
@@ -202,6 +219,17 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
             best_val_f1 = val_metrics["macro_f1"]
             best_path = os.path.join(save_dir, f"best_{model_name}_model.pth")
             torch.save(model.state_dict(), best_path)
+
+        # Save the full state to latest checkpoint
+        torch.save({
+            "epoch": epoch,
+            "model_state": model.state_dict(),
+            "optimizer_state": optimizer.state_dict(),
+            "scheduler_state": scheduler.state_dict(),
+            "scaler_state": scaler.state_dict(),
+            "best_val_f1": best_val_f1,
+            "history": history
+        }, latest_path)
 
     final_metrics = compute_comprehensive_metrics(val_targets, val_preds, val_probs)
 

@@ -12,7 +12,9 @@ class InceptionV3Baseline(nn.Module):
         super().__init__()
         weights = Inception_V3_Weights.DEFAULT if pretrained else None
         self.aux_logits = aux_logits
-        self.model = inception_v3(weights=weights, aux_logits=aux_logits, transform_input=False)
+        init_aux = True if weights else aux_logits
+        self.model = inception_v3(weights=weights, aux_logits=init_aux, transform_input=False)
+        self.model.aux_logits = aux_logits
         in_features = self.model.fc.in_features
         self.model.fc = nn.Linear(in_features, num_classes)
         if aux_logits and hasattr(self.model, 'AuxLogits'):

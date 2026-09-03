@@ -43,7 +43,7 @@ def build_mrl_model(model_name: str, num_classes: int = 2):
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
-def train_single_mrl_model(model_name: str, epochs: int = 30, batch_size: int = 128, lr: float = 3e-4, device=None):
+def train_single_mrl_model(model_name: str, epochs: int = 30, batch_size: int = 128, lr: float = 3e-4, device=None, from_scratch: bool = False):
     print(f"\n======================================================================")
     print(f"       STARTING HIGH-SPEED MRL TRAINING FOR MODEL: {model_name.upper()}")
     print(f"======================================================================")
@@ -116,22 +116,23 @@ def train_single_mrl_model(model_name: str, epochs: int = 30, batch_size: int = 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     scaler = torch.amp.GradScaler('cuda')
 
-    for p in possible_paths:
-        if os.path.exists(p):
-            print(f"[PRELOAD SUCCESS] Loading checkpoint state for '{model_name}' from: {p}")
-            try:
-                ckpt = torch.load(p, map_location=device)
-                if isinstance(ckpt, dict) and "model_state" in ckpt:
-                    model.load_state_dict(ckpt["model_state"], strict=False)
-                elif isinstance(ckpt, dict) and "state_dict" in ckpt:
-                    model.load_state_dict(ckpt["state_dict"], strict=False)
-                else:
-                    model.load_state_dict(ckpt, strict=False)
-                print(f"[PRELOAD SUCCESS] Loaded existing MRL weights for '{model_name}'. No training from scratch.")
-                preloaded = True
-                break
-            except Exception as e:
-                print(f"[PRELOAD WARN] Could not load MRL checkpoint {p}: {e}")
+    if not from_scratch:
+        for p in possible_paths:
+            if os.path.exists(p):
+                print(f"[PRELOAD SUCCESS] Loading checkpoint state for '{model_name}' from: {p}")
+                try:
+                    ckpt = torch.load(p, map_location=device)
+                    if isinstance(ckpt, dict) and "model_state" in ckpt:
+                        model.load_state_dict(ckpt["model_state"], strict=False)
+                    elif isinstance(ckpt, dict) and "state_dict" in ckpt:
+                        model.load_state_dict(ckpt["state_dict"], strict=False)
+                    else:
+                        model.load_state_dict(ckpt, strict=False)
+                    print(f"[PRELOAD SUCCESS] Loaded existing MRL weights for '{model_name}'. No training from scratch.")
+                    preloaded = True
+                    break
+                except Exception as e:
+                    print(f"[PRELOAD WARN] Could not load MRL checkpoint {p}: {e}")
     if not preloaded:
         print(f"[INFO] Initialized '{model_name}' with default backbone pre-trained weights.")
 
@@ -268,7 +269,7 @@ def train_single_mrl_model(model_name: str, epochs: int = 30, batch_size: int = 
         "epochs": epochs
     }
 
-def train_all_mrl_models(epochs: int = 30, models_list: list = None):
+def train_all_mrl_models(epochs: int = 30, models_list: list = None, from_scratch: bool = False):
     assert torch.cuda.is_available(), "[ERROR] CUDA GPU required for MRL dataset training!"
     device = torch.device("cuda:0")
     print(f"[INFO] Using Device for MRL Benchmark: {torch.cuda.get_device_name(0)}")
@@ -279,7 +280,7 @@ def train_all_mrl_models(epochs: int = 30, models_list: list = None):
     results = []
 
     for name in models_list:
-        res = train_single_mrl_model(name, epochs=epochs, device=device)
+        res = train_single_mrl_model(name, epochs=epochs, device=device, from_scratch=from_scratch)
         results.append(res)
 
         # Per-model instant artifact generation & GitHub auto-sync
@@ -348,6 +349,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs for MRL models")
     parser.add_argument("--models", nargs="+", default=["resnet50", "vit", "swin", "inception"], help="List of models to train (e.g. resnet50 vit swin inception sota)")
+    parser.add_argument("--from-scratch", action="store_true", help="Force training from scratch (ignore existing checkpoints)")
     args = parser.parse_args()
-    train_all_mrl_models(epochs=args.epochs, models_list=args.models)
+    train_all_mrl_models(epochs=args.epochs, models_list=args.models, from_scratch=args.from_scratch)
 

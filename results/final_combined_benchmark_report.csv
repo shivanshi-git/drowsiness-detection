@@ -3,8 +3,8 @@ NTHU-DDD,RESNET50,Completed,30/30,70.30%,86.60%,saved_models/resnet50/best_resne
 NTHU-DDD,SOTA,Completed,30/30,64.35%,85.30%,saved_models/sota/best_sota_model.pth
 NTHU-DDD,VIT,Completed,30/30,46.03%,85.30%,saved_models/vit/best_vit_model.pth
 NTHU-DDD,SWIN,Completed,30/30,46.03%,85.30%,saved_models/swin/best_swin_model.pth
-MRL-Eye,RESNET50,In Progress,0/30,Pending,Pending,saved_models/mrl_eye/resnet50/best_resnet50_mrl_model.pth
+MRL-Eye,RESNET50,Completed,30/30,99.12%,99.15%,saved_models/mrl_eye/resnet50/best_resnet50_mrl_model.pth
 MRL-Eye,SOTA,Completed,30/30,98.33%,98.33%,saved_models/mrl_eye/sota/best_sota_mrl_model.pth
-MRL-Eye,VIT,Queued,0/30,Pending,Pending,saved_models/mrl_eye/vit/best_vit_mrl_model.pth
-MRL-Eye,SWIN,Queued,0/30,Pending,Pending,saved_models/mrl_eye/swin/best_swin_mrl_model.pth
-MRL-Eye,INCEPTION,Queued,0/30,Pending,Pending,saved_models/mrl_eye/inception/best_inception_mrl_model.pth
+MRL-Eye,VIT,Completed,30/30,99.01%,99.01%,saved_models/mrl_eye/vit/best_vit_mrl_model.pth
+MRL-Eye,SWIN,Completed,30/30,99.10%,99.13%,saved_models/mrl_eye/swin/best_swin_mrl_model.pth
+MRL-Eye,INCEPTION,Completed,30/30,98.45%,98.50%,saved_models/mrl_eye/inception/best_inception_mrl_model.pth

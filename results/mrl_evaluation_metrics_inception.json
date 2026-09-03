@@ -1,0 +1,6 @@
+{
+    "Model": "INCEPTION",
+    "Accuracy": 0.985,
+    "Macro_F1": 0.9845,
+    "Total_Epochs": 30
+}

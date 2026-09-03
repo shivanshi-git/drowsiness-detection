@@ -119,18 +119,18 @@ def generate_reports():
 
     # Save NTHU CSV & JSON
     pd.DataFrame(nthu_data).to_csv("results/nthu_ddd_final_benchmark_report.csv", index=False)
-    with open("results/nthu_ddd_final_benchmark_report.json", "w") as f:
+    with open("results/nthu_ddd_final_benchmark_report.json", "w", encoding="utf-8") as f:
         json.dump(nthu_data, f, indent=4)
 
     # Save MRL CSV & JSON
     pd.DataFrame(mrl_data).to_csv("results/mrl_eye_final_benchmark_report.csv", index=False)
-    with open("results/mrl_eye_final_benchmark_report.json", "w") as f:
+    with open("results/mrl_eye_final_benchmark_report.json", "w", encoding="utf-8") as f:
         json.dump(mrl_data, f, indent=4)
 
     # Combined Table CSV & JSON
     combined_data = nthu_data + mrl_data
     pd.DataFrame(combined_data).to_csv("results/final_combined_benchmark_report.csv", index=False)
-    with open("results/final_combined_benchmark_report.json", "w") as f:
+    with open("results/final_combined_benchmark_report.json", "w", encoding="utf-8") as f:
         json.dump(combined_data, f, indent=4)
 
     # Markdown Report Construction
@@ -164,13 +164,13 @@ This document contains the official benchmark evaluation results across all 5 de
 
 ### 📊 Report Summary & Artifacts
 - All model checkpoints are saved in `saved_models/` and `saved_models/mrl_eye/`.
-- All evaluation metric CSVs, JSONs, Confusion Matrix PNGs, and ROC curves are saved in [results/](file:///home/altos/.gemini/antigravity-ide/scratch/drowsiness-detection/results).
+- All evaluation metric CSVs, JSONs, Confusion Matrix PNGs, and ROC curves are saved in [results/](file:///results).
 """
 
-    with open("FINAL_BENCHMARK_REPORT.md", "w") as f:
+    with open("FINAL_BENCHMARK_REPORT.md", "w", encoding="utf-8") as f:
         f.write(md_content)
 
-    with open("results/FINAL_BENCHMARK_REPORT.md", "w") as f:
+    with open("results/FINAL_BENCHMARK_REPORT.md", "w", encoding="utf-8") as f:
         f.write(md_content)
 
     print("[SUCCESS] Saved dynamic FINAL_BENCHMARK_REPORT.md and CSV/JSON reports!")

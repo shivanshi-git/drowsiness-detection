@@ -1,0 +1,2 @@
+Model,Accuracy,Macro_F1,Total_Epochs
+INCEPTION,0.985,0.9845,30

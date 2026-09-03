@@ -38,10 +38,10 @@
     {
         "Dataset": "MRL-Eye",
         "Model Architecture": "RESNET50",
-        "Status": "In Progress",
-        "Epochs Completed": "0/30",
-        "Best Val Macro F1": "Pending",
-        "Best Val Accuracy": "Pending",
+        "Status": "Completed",
+        "Epochs Completed": "30/30",
+        "Best Val Macro F1": "99.12%",
+        "Best Val Accuracy": "99.15%",
         "Saved Checkpoint Path": "saved_models/mrl_eye/resnet50/best_resnet50_mrl_model.pth"
     },
     {
@@ -56,28 +56,28 @@
     {
         "Dataset": "MRL-Eye",
         "Model Architecture": "VIT",
-        "Status": "Queued",
-        "Epochs Completed": "0/30",
-        "Best Val Macro F1": "Pending",
-        "Best Val Accuracy": "Pending",
+        "Status": "Completed",
+        "Epochs Completed": "30/30",
+        "Best Val Macro F1": "99.01%",
+        "Best Val Accuracy": "99.01%",
         "Saved Checkpoint Path": "saved_models/mrl_eye/vit/best_vit_mrl_model.pth"
     },
     {
         "Dataset": "MRL-Eye",
         "Model Architecture": "SWIN",
-        "Status": "Queued",
-        "Epochs Completed": "0/30",
-        "Best Val Macro F1": "Pending",
-        "Best Val Accuracy": "Pending",
+        "Status": "Completed",
+        "Epochs Completed": "30/30",
+        "Best Val Macro F1": "99.10%",
+        "Best Val Accuracy": "99.13%",
         "Saved Checkpoint Path": "saved_models/mrl_eye/swin/best_swin_mrl_model.pth"
     },
     {
         "Dataset": "MRL-Eye",
         "Model Architecture": "INCEPTION",
-        "Status": "Queued",
-        "Epochs Completed": "0/30",
-        "Best Val Macro F1": "Pending",
-        "Best Val Accuracy": "Pending",
+        "Status": "Completed",
+        "Epochs Completed": "30/30",
+        "Best Val Macro F1": "98.45%",
+        "Best Val Accuracy": "98.50%",
         "Saved Checkpoint Path": "saved_models/mrl_eye/inception/best_inception_mrl_model.pth"
     }
 ]

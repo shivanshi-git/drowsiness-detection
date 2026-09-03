@@ -122,7 +122,8 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
         running_loss = 0.0
         train_preds, train_targets = [], []
 
-        for batch in train_loader:
+        from tqdm import tqdm
+        for batch in tqdm(train_loader, desc=f"[{model_name.upper()}] Epoch {epoch}/{num_epochs} Train"):
             video = batch["video"].to(device)
             flow = batch["flow"].to(device)
             labels = batch["label"].to(device)
@@ -157,7 +158,7 @@ def train_single_model(model_name: str, cfg: dict, epochs_override: int = None, 
         val_preds, val_targets, val_probs = [], [], []
 
         with torch.no_grad():
-            for batch in val_loader:
+            for batch in tqdm(val_loader, desc=f"[{model_name.upper()}] Epoch {epoch}/{num_epochs} Val"):
                 video = batch["video"].to(device)
                 flow = batch["flow"].to(device)
                 labels = batch["label"].to(device)

@@ -1,0 +1,2 @@
+model_name,best_val_acc,best_val_f1,epochs
+INCEPTION,99.12,99.1,21

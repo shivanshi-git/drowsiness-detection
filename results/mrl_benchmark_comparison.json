@@ -1,0 +1,8 @@
+[
+    {
+        "model_name": "INCEPTION",
+        "best_val_acc": 99.12,
+        "best_val_f1": 99.1,
+        "epochs": 21
+    }
+]

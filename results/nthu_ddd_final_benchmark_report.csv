@@ -1,5 +1,2 @@
 Dataset,Model Architecture,Status,Epochs Completed,Best Val Macro F1,Best Val Accuracy,Saved Checkpoint Path
-NTHU-DDD,RESNET50,Completed,30/30,70.30%,86.60%,saved_models/resnet50/best_resnet50_model.pth
-NTHU-DDD,SOTA,Completed,30/30,64.35%,85.30%,saved_models/sota/best_sota_model.pth
-NTHU-DDD,VIT,Completed,30/30,46.03%,85.30%,saved_models/vit/best_vit_model.pth
-NTHU-DDD,SWIN,Completed,30/30,46.03%,85.30%,saved_models/swin/best_swin_model.pth
+NTHU-DDD,INCEPTION,Completed,30/30,40.54%,76.23%,saved_models/inception/best_inception_model.pth

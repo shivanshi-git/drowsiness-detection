@@ -39,9 +39,9 @@
         "Dataset": "MRL-Eye",
         "Model Architecture": "INCEPTION",
         "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Best Val Macro F1": "98.45%",
-        "Best Val Accuracy": "98.50%",
+        "Epochs Completed": "21/21",
+        "Best Val Macro F1": "99.10%",
+        "Best Val Accuracy": "99.12%",
         "Saved Checkpoint Path": "saved_models/mrl_eye/inception/best_inception_mrl_model.pth"
     }
 ]

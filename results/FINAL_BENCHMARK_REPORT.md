@@ -8,10 +8,7 @@ This document contains the official benchmark evaluation results across all 5 de
 
 | Model Architecture | Status | Epochs Completed | Best Val Macro F1 | Best Val Accuracy | Saved Checkpoint Path |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **RESNET50** | ✅ Completed | `30/30` | **70.30%** | **86.60%** | [best_resnet50_model.pth](file:///saved_models/resnet50/best_resnet50_model.pth) |
-| **SOTA** | ✅ Completed | `30/30` | **64.35%** | **85.30%** | [best_sota_model.pth](file:///saved_models/sota/best_sota_model.pth) |
-| **VIT** | ✅ Completed | `30/30` | **46.03%** | **85.30%** | [best_vit_model.pth](file:///saved_models/vit/best_vit_model.pth) |
-| **SWIN** | ✅ Completed | `30/30` | **46.03%** | **85.30%** | [best_swin_model.pth](file:///saved_models/swin/best_swin_model.pth) |
+| **INCEPTION** | ✅ Completed | `30/30` | **40.54%** | **76.23%** | [best_inception_model.pth](file:///saved_models/inception/best_inception_model.pth) |
 
 ---
 
@@ -23,7 +20,7 @@ This document contains the official benchmark evaluation results across all 5 de
 | **SOTA** | ✅ Completed | `30/30` | **98.33%** | **98.33%** | [best_sota_mrl_model.pth](file:///saved_models/mrl_eye/sota/best_sota_mrl_model.pth) |
 | **VIT** | ✅ Completed | `30/30` | **99.01%** | **99.01%** | [best_vit_mrl_model.pth](file:///saved_models/mrl_eye/vit/best_vit_mrl_model.pth) |
 | **SWIN** | ✅ Completed | `30/30` | **99.10%** | **99.13%** | [best_swin_mrl_model.pth](file:///saved_models/mrl_eye/swin/best_swin_mrl_model.pth) |
-| **INCEPTION** | ✅ Completed | `30/30` | **98.45%** | **98.50%** | [best_inception_mrl_model.pth](file:///saved_models/mrl_eye/inception/best_inception_mrl_model.pth) |
+| **INCEPTION** | ✅ Completed | `21/21` | **99.10%** | **99.12%** | [best_inception_mrl_model.pth](file:///saved_models/mrl_eye/inception/best_inception_mrl_model.pth) |
 
 ---
 

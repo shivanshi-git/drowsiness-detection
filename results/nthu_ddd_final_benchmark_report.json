@@ -1,38 +1,11 @@
 [
     {
         "Dataset": "NTHU-DDD",
-        "Model Architecture": "RESNET50",
+        "Model Architecture": "INCEPTION",
         "Status": "Completed",
         "Epochs Completed": "30/30",
-        "Best Val Macro F1": "70.30%",
-        "Best Val Accuracy": "86.60%",
-        "Saved Checkpoint Path": "saved_models/resnet50/best_resnet50_model.pth"
-    },
-    {
-        "Dataset": "NTHU-DDD",
-        "Model Architecture": "SOTA",
-        "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Best Val Macro F1": "64.35%",
-        "Best Val Accuracy": "85.30%",
-        "Saved Checkpoint Path": "saved_models/sota/best_sota_model.pth"
-    },
-    {
-        "Dataset": "NTHU-DDD",
-        "Model Architecture": "VIT",
-        "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Best Val Macro F1": "46.03%",
-        "Best Val Accuracy": "85.30%",
-        "Saved Checkpoint Path": "saved_models/vit/best_vit_model.pth"
-    },
-    {
-        "Dataset": "NTHU-DDD",
-        "Model Architecture": "SWIN",
-        "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Best Val Macro F1": "46.03%",
-        "Best Val Accuracy": "85.30%",
-        "Saved Checkpoint Path": "saved_models/swin/best_swin_model.pth"
+        "Best Val Macro F1": "40.54%",
+        "Best Val Accuracy": "76.23%",
+        "Saved Checkpoint Path": "saved_models/inception/best_inception_model.pth"
     }
 ]

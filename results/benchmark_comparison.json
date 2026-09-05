@@ -1,42 +1,10 @@
 [
     {
-        "Model Architecture": "RESNET50",
-        "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Accuracy": 86.6,
-        "Macro_Precision": 72.1,
-        "Macro_Recall": 68.8,
-        "Macro_F1": 70.3,
-        "Weighted_F1": 84.2
-    },
-    {
-        "Model Architecture": "SOTA",
-        "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Accuracy": 85.3,
-        "Macro_Precision": 66.8,
-        "Macro_Recall": 62.1,
-        "Macro_F1": 64.35,
-        "Weighted_F1": 82.5
-    },
-    {
-        "Model Architecture": "VIT",
-        "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Accuracy": 85.3,
-        "Macro_Precision": 48.2,
-        "Macro_Recall": 44.1,
-        "Macro_F1": 46.03,
-        "Weighted_F1": 81.1
-    },
-    {
-        "Model Architecture": "SWIN",
-        "Status": "Completed",
-        "Epochs Completed": "30/30",
-        "Accuracy": 85.3,
-        "Macro_Precision": 48.2,
-        "Macro_Recall": 44.1,
-        "Macro_F1": 46.03,
-        "Weighted_F1": 81.1
+        "Model Architecture": "INCEPTION",
+        "Accuracy (%)": 76.23,
+        "Macro Precision (%)": 40.01,
+        "Macro Recall (%)": 42.05,
+        "Macro F1 (%)": 40.54,
+        "Weighted F1 (%)": 78.19
     }
 ]

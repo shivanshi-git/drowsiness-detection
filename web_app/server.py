@@ -3,7 +3,7 @@ import io
 import time
 import json
 import asyncio
-from typing import Optional         
+from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException   
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles

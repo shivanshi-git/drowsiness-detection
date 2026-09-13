@@ -71,6 +71,9 @@ class StreamManager:
         
         # State Buffers
         self.frame_buffer = collections.deque(maxlen=self.seq_len)
+        self.flow_buffer = collections.deque(maxlen=self.seq_len)
+        self.cached_raw_score = 0.10
+        self.cached_pred_class = 0
         self.frame_counter = 0
         self.last_inference_time = time.time()
         self.current_fps = 0.0
@@ -149,22 +152,28 @@ class StreamManager:
     def detect_face_and_landmarks(self, frame_bgr: np.ndarray) -> dict:
         """
         Fast face detection and geometric Eye Aspect Ratio (EAR) + Mouth Aspect Ratio (MAR) computation.
+        Optimized with downsampled scale detection for high-FPS performance.
         """
         h, w = frame_bgr.shape[:2]
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
         
-        # CLAHE enhancement for reliable detection in low light
-        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-        enhanced_gray = clahe.apply(gray)
+        # Scale down for fast 60+ FPS cascade detection
+        scale = 320.0 / max(w, 1)
+        sw, sh = int(w * scale), int(h * scale)
+        small_gray = cv2.resize(gray, (sw, sh))
         
         faces = self.face_cascade.detectMultiScale(
-            enhanced_gray, scaleFactor=1.12, minNeighbors=4, minSize=(60, 60)
+            small_gray, scaleFactor=1.15, minNeighbors=3, minSize=(30, 30)
         )
         
         face_detected = len(faces) > 0
         if face_detected:
-            x, y, fw, fh = max(faces, key=lambda b: b[2] * b[3])
-            bbox = [int(x), int(y), int(fw), int(fh)]
+            # Scale coordinates back to original frame size
+            sx, sy, sfw, sfh = max(faces, key=lambda b: b[2] * b[3])
+            inv = 1.0 / scale
+            x, y = int(sx * inv), int(sy * inv)
+            fw, fh = int(sfw * inv), int(sfh * inv)
+            bbox = [x, y, fw, fh]
         else:
             # Fallback center RoI
             x = int(w * 0.20)
@@ -173,13 +182,15 @@ class StreamManager:
             fh = int(h * 0.70)
             bbox = [x, y, fw, fh]
             
-        # Detect Eyes within upper half of face
-        roi_gray = enhanced_gray[y:y + int(fh * 0.55), x:x + fw]
-        eyes = self.eye_cascade.detectMultiScale(
-            roi_gray, scaleFactor=1.1, minNeighbors=3, minSize=(20, 20)
-        )
+        # Fast eye detection in upper half of face
+        roi_gray = gray[y:y + int(fh * 0.55), x:x + fw]
+        eyes = []
+        if roi_gray.size > 0:
+            small_roi = cv2.resize(roi_gray, (max(1, int(roi_gray.shape[1] * scale)), max(1, int(roi_gray.shape[0] * scale))))
+            small_eyes = self.eye_cascade.detectMultiScale(small_roi, scaleFactor=1.12, minNeighbors=2, minSize=(14, 14))
+            eyes = small_eyes
         
-        # Estimate EAR based on eye height/width aspect ratios
+        # Estimate EAR based on eye aspect ratio
         ear = 0.30
         if len(eyes) > 0:
             avg_h = np.mean([eh for (_, _, ew, eh) in eyes])
@@ -187,12 +198,11 @@ class StreamManager:
             ear = float(avg_h / max(avg_w, 1.0)) * 0.5
             ear = float(np.clip(ear, 0.05, 0.45))
         elif face_detected:
-            ear = 0.14  # Default to low if face exists but eyes cannot be opened/detected
-            
-        # Geometric estimate for mouth aspect ratio (lower third of face)
-        mouth_roi = enhanced_gray[y + int(fh * 0.65):y + fh, x + int(fw * 0.2):x + int(fw * 0.8)]
+            ear = 0.15
+
+        # Geometric estimate for mouth aspect ratio
+        mouth_roi = gray[y + int(fh * 0.65):y + fh, x + int(fw * 0.2):x + int(fw * 0.8)]
         if mouth_roi.size > 0:
-            # Dark cavity pixel ratio indicates open mouth/yawn
             thresh = np.mean(mouth_roi) * 0.65
             open_ratio = float(np.sum(mouth_roi < thresh) / mouth_roi.size)
             mar = float(np.clip(open_ratio * 1.8, 0.10, 0.85))
@@ -202,7 +212,7 @@ class StreamManager:
         # Head pitch approximation
         face_center_y = y + fh / 2
         norm_offset = (face_center_y - (h / 2)) / (h / 2)
-        head_pitch = float(norm_offset * 25.0)  # Positive = pitching down
+        head_pitch = float(norm_offset * 25.0)
 
         landmarks = [
             {"x": int(x + fw * 0.32), "y": int(y + fh * 0.38), "name": "left_eye"},
@@ -225,6 +235,7 @@ class StreamManager:
         """
         Ingests a single video frame, computes model inference across temporal window,
         updates alarm status, and returns detailed metrics.
+        Optimized with rolling optical flow and adaptive inference cadence.
         """
         now = time.time()
         self.frame_counter += 1
@@ -235,46 +246,62 @@ class StreamManager:
             self.current_fps = 0.9 * self.current_fps + 0.1 * (1.0 / dt)
         self.last_inference_time = now
 
-        # 1. Detect face and geometric landmarks
+        # 1. Fast geometric face and landmark detection
         geo = self.detect_face_and_landmarks(frame_bgr)
         
-        # 2. Append to sequence buffer
+        # 2. Append to sequence buffer & update rolling flow buffer
+        if len(self.frame_buffer) >= 1:
+            pair_flow = self.flow_extractor.compute_pair_flow(self.frame_buffer[-1], frame_bgr)
+            self.flow_buffer.append(pair_flow)
+        else:
+            self.flow_buffer.append(np.zeros((112, 112, 2), dtype=np.float32))
+
         self.frame_buffer.append(frame_bgr)
         
-        # Default metrics while buffer fills
-        fatigue_score = self.last_metrics.get("fatigue_score", 0.1)
-        pred_class = self.last_metrics.get("predicted_class", 0)
+        # Instant safety overrides based on geometry
+        fatigue_score = self.cached_raw_score
+        pred_class = self.cached_pred_class
         llformer_enhanced_bgr = None
 
         # 3. Model Inference when buffer is ready
         if len(self.frame_buffer) >= self.seq_len and self.model is not None:
-            buffer_list = list(self.frame_buffer)
-            video_tensor = self.transform(buffer_list).unsqueeze(0).to(self.device)
-            flow_tensor = self.flow_extractor.extract_sequence_flow(buffer_list).unsqueeze(0).to(self.device)
+            # On CPU, run heavy transformer model every 2nd frame or on explicit demand
+            should_run_transformer = (self.frame_counter % 2 == 0) or (self.device == "cuda") or generate_xai
 
-            with torch.no_grad():
-                out = self.model(video_tensor, flow_tensor)
-                logits = out["logits"]
-                raw_score = out["fatigue_score"].item()
-                raw_pred = torch.argmax(logits, dim=1).item()
-                
-                # Incorporate geometric EAR / MAR heuristics to enforce robust physical safety
-                if geo["ear"] < 0.16 and raw_score < 0.60:
-                    raw_score = max(raw_score, 0.75)
-                    raw_pred = 4 # Eye closure
-                elif geo["mar"] > 0.55 and raw_score < 0.50:
-                    raw_score = max(raw_score, 0.60)
-                    raw_pred = 2 # Yawn
-                    
-                fatigue_score = raw_score
-                pred_class = raw_pred
+            if should_run_transformer:
+                buffer_list = list(self.frame_buffer)
+                video_tensor = self.transform(buffer_list).unsqueeze(0).to(self.device)
 
-                # Extract LLFormer enhanced last frame
-                if "enhanced_video" in out and out["enhanced_video"] is not None:
-                    enh_t = out["enhanced_video"][0, -1].detach().cpu().numpy() # (3, H, W)
-                    enh_t = np.transpose(enh_t, (1, 2, 0)) # (H, W, 3)
-                    enh_t = (enh_t * 255.0).clip(0, 255).astype(np.uint8)
-                    llformer_enhanced_bgr = cv2.cvtColor(enh_t, cv2.COLOR_RGB2BGR)
+                # Use fast rolling optical flow buffer (avoids recomputing 15 times!)
+                flow_arr = np.stack(list(self.flow_buffer)) # (T, 112, 112, 2)
+                flow_tensor = torch.from_numpy(flow_arr).permute(0, 3, 1, 2).unsqueeze(0).to(self.device).float()
+
+                with torch.no_grad():
+                    out = self.model(video_tensor, flow_tensor)
+                    logits = out["logits"]
+                    self.cached_raw_score = out["fatigue_score"].item()
+                    self.cached_pred_class = torch.argmax(logits, dim=1).item()
+
+                    # Extract LLFormer enhanced last frame if requested
+                    if generate_xai and "enhanced_video" in out and out["enhanced_video"] is not None:
+                        enh_t = out["enhanced_video"][0, -1].detach().cpu().numpy()
+                        enh_t = np.transpose(enh_t, (1, 2, 0))
+                        enh_t = (enh_t * 255.0).clip(0, 255).astype(np.uint8)
+                        llformer_enhanced_bgr = cv2.cvtColor(enh_t, cv2.COLOR_RGB2BGR)
+
+            raw_score = self.cached_raw_score
+            raw_pred = self.cached_pred_class
+
+            # Real-time geometric safety heuristic
+            if geo["ear"] < 0.16:
+                raw_score = max(raw_score, 0.80)
+                raw_pred = 4  # Eye closure
+            elif geo["mar"] > 0.55:
+                raw_score = max(raw_score, 0.65)
+                raw_pred = 2  # Yawn
+
+            fatigue_score = raw_score
+            pred_class = raw_pred
 
             # Update Adaptive Alarm
             alarm_data = self.alarm_system.update(

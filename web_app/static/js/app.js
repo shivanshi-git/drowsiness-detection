@@ -378,45 +378,79 @@ class DriverGuardianApp {
   }
 
   // =========================================================================
-  // Live Browser WebCam Pipeline
+  // Live Browser WebCam Pipeline (High-Performance Decoupled Architecture)
   // =========================================================================
   async startWebcam() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, frameRate: { ideal: 30 } },
+        video: { width: 640, height: 480, frameRate: { ideal: 30, max: 60 } },
         audio: false
       });
       this.videoEl.srcObject = stream;
       await this.videoEl.play();
 
       this.isMonitoring = true;
-      const webcamLoop = async () => {
+      this.isProcessingFrame = false;
+
+      // Downsampled offscreen canvas for fast transmission (320x240 = 4x lighter)
+      this.offscreenCanvas.width = 320;
+      this.offscreenCanvas.height = 240;
+
+      // 1. Decoupled 60 FPS Native Camera Display Loop (Zero Lag)
+      const renderLoop = () => {
+        if (!this.isMonitoring || this.mode !== 'webcam') return;
+        if (this.videoEl.readyState >= 2) {
+          this.ctx.drawImage(this.videoEl, 0, 0, this.canvas.width, this.canvas.height);
+          if (this.lastMetrics) {
+            this.drawHudOverlay(this.lastMetrics);
+          }
+        }
+        requestAnimationFrame(renderLoop);
+      };
+      requestAnimationFrame(renderLoop);
+
+      // 2. Background Asynchronous AI Inference Loop (Non-blocking)
+      const inferenceLoop = async () => {
         if (!this.isMonitoring || this.mode !== 'webcam') return;
 
-        // Draw webcam frame to offscreen canvas and encode
-        this.offscreenCtx.drawImage(this.videoEl, 0, 0, 640, 480);
-        const b64 = this.offscreenCanvas.toDataURL('image/jpeg', 0.70);
+        if (!this.isProcessingFrame && this.videoEl.readyState >= 2) {
+          this.isProcessingFrame = true;
+          this.offscreenCtx.drawImage(this.videoEl, 0, 0, 320, 240);
+          const b64 = this.offscreenCanvas.toDataURL('image/jpeg', 0.60);
 
-        try {
-          const resp = await fetch('/api/process_frame', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: b64, request_xai: false })
-          });
-          const res = await resp.json();
-          if (res.status === 'success') {
-            // Render directly onto HUD canvas
-            this.ctx.drawImage(this.videoEl, 0, 0, this.canvas.width, this.canvas.height);
-            this.drawHudOverlay(res.metrics);
-            this.updateTelemetry(res.metrics);
+          try {
+            const resp = await fetch('/api/process_frame', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image: b64, request_xai: false })
+            });
+            const res = await resp.json();
+            if (res.status === 'success') {
+              const m = res.metrics;
+              // Rescale bounding box & landmark coordinates (320x240 -> 640x480)
+              if (m.bbox) {
+                m.bbox = [m.bbox[0] * 2, m.bbox[1] * 2, m.bbox[2] * 2, m.bbox[3] * 2];
+              }
+              if (m.landmarks) {
+                m.landmarks = m.landmarks.map(pt => ({
+                  ...pt,
+                  x: pt.x * 2,
+                  y: pt.y * 2
+                }));
+              }
+              this.lastMetrics = m;
+              this.updateTelemetry(m);
+            }
+          } catch (e) {
+            console.warn('Webcam inference notice:', e);
+          } finally {
+            this.isProcessingFrame = false;
           }
-        } catch (e) {
-          console.warn('Webcam frame processing err:', e);
         }
 
-        setTimeout(webcamLoop, 50); // ~20 FPS
+        setTimeout(inferenceLoop, 80); // ~12 FPS AI refresh cadence
       };
-      webcamLoop();
+      inferenceLoop();
     } catch (err) {
       alert(`Camera Access Error: ${err.message}. Falling back to Simulated Drive.`);
       this.setMode('simulation');
@@ -424,6 +458,7 @@ class DriverGuardianApp {
   }
 
   stopWebcam() {
+    this.isProcessingFrame = false;
     if (this.videoEl.srcObject) {
       this.videoEl.srcObject.getTracks().forEach(track => track.stop());
       this.videoEl.srcObject = null;

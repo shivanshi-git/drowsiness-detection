@@ -62,6 +62,13 @@ async def serve_index():
     return FileResponse(index_path)
 
 
+@app.get("/favicon.ico", response_class=FileResponse)
+async def serve_favicon():
+    """Serves the cockpit favicon."""
+    fav_path = os.path.join(STATIC_DIR, "favicon.svg")
+    return FileResponse(fav_path, media_type="image/svg+xml")
+
+
 @app.get("/api/status")
 async def get_system_status():
     """Returns real-time GPU/CPU status, active model, and engine telemetry."""

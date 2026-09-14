@@ -151,8 +151,8 @@ class StreamManager:
 
     def detect_face_and_landmarks(self, frame_bgr: np.ndarray) -> dict:
         """
-        Fast face detection and geometric Eye Aspect Ratio (EAR) + Mouth Aspect Ratio (MAR) computation.
-        Optimized with downsampled scale detection for high-FPS performance.
+        Fast face detection and robust biometrics computation.
+        Uses standardized face crops and photometric contrast for deterministic EAR/MAR estimation.
         """
         h, w = frame_bgr.shape[:2]
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
@@ -160,7 +160,7 @@ class StreamManager:
         # Scale down for fast 60+ FPS cascade detection
         scale = 320.0 / max(w, 1)
         sw, sh = int(w * scale), int(h * scale)
-        small_gray = cv2.resize(gray, (sw, sh))
+        small_gray = cv2.resize(gray, (sw, sw if h == w else sh))
         
         faces = self.face_cascade.detectMultiScale(
             small_gray, scaleFactor=1.15, minNeighbors=3, minSize=(30, 30)
@@ -171,59 +171,71 @@ class StreamManager:
             # Scale coordinates back to original frame size
             sx, sy, sfw, sfh = max(faces, key=lambda b: b[2] * b[3])
             inv = 1.0 / scale
-            x, y = int(sx * inv), int(sy * inv)
-            fw, fh = int(sfw * inv), int(sfh * inv)
+            x, y = max(0, int(sx * inv)), max(0, int(sy * inv))
+            fw, fh = min(w - x, int(sfw * inv)), min(h - y, int(sfh * inv))
             bbox = [x, y, fw, fh]
         else:
             # Fallback center RoI
-            x = int(w * 0.20)
-            y = int(h * 0.15)
-            fw = int(w * 0.60)
-            fh = int(h * 0.70)
+            x = int(w * 0.15)
+            y = int(h * 0.10)
+            fw = int(w * 0.70)
+            fh = int(h * 0.75)
             bbox = [x, y, fw, fh]
-            
-        # Fast eye detection in upper half of face
-        roi_gray = gray[y:y + int(fh * 0.55), x:x + fw]
-        eyes = []
-        if roi_gray.size > 0:
-            small_roi = cv2.resize(roi_gray, (max(1, int(roi_gray.shape[1] * scale)), max(1, int(roi_gray.shape[0] * scale))))
-            small_eyes = self.eye_cascade.detectMultiScale(small_roi, scaleFactor=1.12, minNeighbors=2, minSize=(14, 14))
-            eyes = small_eyes
-        
-        # Estimate EAR based on eye aspect ratio
-        ear = 0.30
-        if len(eyes) > 0:
-            avg_h = np.mean([eh for (_, _, ew, eh) in eyes])
-            avg_w = np.mean([ew for (_, _, ew, eh) in eyes])
-            ear = float(avg_h / max(avg_w, 1.0)) * 0.5
-            ear = float(np.clip(ear, 0.05, 0.45))
-        elif face_detected:
-            ear = 0.15
 
-        # Geometric estimate for mouth aspect ratio
-        mouth_roi = gray[y + int(fh * 0.65):y + fh, x + int(fw * 0.2):x + int(fw * 0.8)]
-        if mouth_roi.size > 0:
-            thresh = np.mean(mouth_roi) * 0.65
-            open_ratio = float(np.sum(mouth_roi < thresh) / mouth_roi.size)
-            mar = float(np.clip(open_ratio * 1.8, 0.10, 0.85))
+        # Extract normalized face crop (224x224)
+        face_crop = frame_bgr[y:y + fh, x:x + fw]
+        if face_crop.size == 0:
+            face_crop = cv2.resize(frame_bgr, (224, 224))
         else:
-            mar = 0.15
+            face_crop = cv2.resize(face_crop, (224, 224))
 
-        # Head pitch approximation
+        face_gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
+
+        # 1. Standardized Eye RoIs inside face crop (upper 22% - 48%)
+        ley1, ley2 = int(224 * 0.22), int(224 * 0.48)
+        lex1, lex2 = int(224 * 0.12), int(224 * 0.48)
+        left_eye_roi = face_gray[ley1:ley2, lex1:lex2]
+
+        rey1, rey2 = int(224 * 0.22), int(224 * 0.48)
+        rex1, rex2 = int(224 * 0.52), int(224 * 0.88)
+        right_eye_roi = face_gray[rey1:rey2, rex1:rex2]
+
+        # Contrast analysis: open eyes have high pupil-to-sclera variance
+        le_std = float(np.std(left_eye_roi)) if left_eye_roi.size > 0 else 25.0
+        re_std = float(np.std(right_eye_roi)) if right_eye_roi.size > 0 else 25.0
+        avg_eye_contrast = (le_std + re_std) / 2.0
+
+        # EAR: Maps contrast directly (Closed: ~12-16 -> ear ~0.12, Open: ~24-38 -> ear ~0.32)
+        ear = float(np.clip(0.10 + (avg_eye_contrast - 14.0) * (0.22 / 16.0), 0.08, 0.40))
+
+        # 2. Standardized Mouth RoI (lower 60% - 94%)
+        my1, my2 = int(224 * 0.60), int(224 * 0.94)
+        mx1, mx2 = int(224 * 0.20), int(224 * 0.80)
+        mouth_roi = face_gray[my1:my2, mx1:mx2]
+
+        mar = 0.15
+        if mouth_roi.size > 0:
+            # In a yawn, the dark open oral cavity significantly expands
+            mouth_mean = np.mean(mouth_roi)
+            dark_cavity_ratio = float(np.sum(mouth_roi < (mouth_mean * 0.65)) / mouth_roi.size)
+            mar = float(np.clip(0.12 + dark_cavity_ratio * 1.8, 0.12, 0.85))
+
+        # 3. Head pitch approximation
         face_center_y = y + fh / 2
         norm_offset = (face_center_y - (h / 2)) / (h / 2)
         head_pitch = float(norm_offset * 25.0)
 
         landmarks = [
-            {"x": int(x + fw * 0.32), "y": int(y + fh * 0.38), "name": "left_eye"},
-            {"x": int(x + fw * 0.68), "y": int(y + fh * 0.38), "name": "right_eye"},
-            {"x": int(x + fw * 0.50), "y": int(y + fh * 0.56), "name": "nose"},
+            {"x": int(x + fw * 0.30), "y": int(y + fh * 0.35), "name": "left_eye"},
+            {"x": int(x + fw * 0.70), "y": int(y + fh * 0.35), "name": "right_eye"},
+            {"x": int(x + fw * 0.50), "y": int(y + fh * 0.55), "name": "nose"},
             {"x": int(x + fw * 0.35), "y": int(y + fh * 0.78), "name": "mouth_left"},
             {"x": int(x + fw * 0.65), "y": int(y + fh * 0.78), "name": "mouth_right"}
         ]
 
         return {
             "face_detected": face_detected,
+            "face_crop": face_crop,
             "bbox": bbox,
             "landmarks": landmarks,
             "ear": ear,
@@ -235,7 +247,7 @@ class StreamManager:
         """
         Ingests a single video frame, computes model inference across temporal window,
         updates alarm status, and returns detailed metrics.
-        Optimized with rolling optical flow and adaptive inference cadence.
+        Optimized with face-aligned sequence modeling and rolling optical flow.
         """
         now = time.time()
         self.frame_counter += 1
@@ -246,17 +258,18 @@ class StreamManager:
             self.current_fps = 0.9 * self.current_fps + 0.1 * (1.0 / dt)
         self.last_inference_time = now
 
-        # 1. Fast geometric face and landmark detection
+        # 1. Fast geometric face and landmark detection with standardized face crop
         geo = self.detect_face_and_landmarks(frame_bgr)
+        face_input = geo.get("face_crop", cv2.resize(frame_bgr, (224, 224)))
         
-        # 2. Append to sequence buffer & update rolling flow buffer
+        # 2. Append face-aligned crop to sequence buffer & update rolling flow buffer
         if len(self.frame_buffer) >= 1:
-            pair_flow = self.flow_extractor.compute_pair_flow(self.frame_buffer[-1], frame_bgr)
+            pair_flow = self.flow_extractor.compute_pair_flow(self.frame_buffer[-1], face_input)
             self.flow_buffer.append(pair_flow)
         else:
             self.flow_buffer.append(np.zeros((112, 112, 2), dtype=np.float32))
 
-        self.frame_buffer.append(frame_bgr)
+        self.frame_buffer.append(face_input)
         
         # Instant safety overrides based on geometry
         fatigue_score = self.cached_raw_score
@@ -289,16 +302,20 @@ class StreamManager:
                         enh_t = (enh_t * 255.0).clip(0, 255).astype(np.uint8)
                         llformer_enhanced_bgr = cv2.cvtColor(enh_t, cv2.COLOR_RGB2BGR)
 
-            raw_score = self.cached_raw_score
-            raw_pred = self.cached_pred_class
-
-            # Real-time geometric safety heuristic
+            # Real-time multi-modal safety heuristics
             if geo["ear"] < 0.16:
-                raw_score = max(raw_score, 0.80)
-                raw_pred = 4  # Eye closure
-            elif geo["mar"] > 0.55:
+                raw_score = max(raw_score, 0.82)
+                raw_pred = 4  # Eye closure / microsleep
+            elif geo["mar"] > 0.50:
                 raw_score = max(raw_score, 0.65)
-                raw_pred = 2  # Yawn
+                raw_pred = 2  # Yawning
+            elif abs(geo["head_pitch"]) > 16.0:
+                raw_score = max(raw_score, 0.60)
+                raw_pred = 3  # Head nodding
+            elif geo["ear"] >= 0.22 and geo["mar"] < 0.38:
+                # Confirmed attentive state
+                raw_score = min(raw_score, 0.15)
+                raw_pred = 0  # Normal attentive
 
             fatigue_score = raw_score
             pred_class = raw_pred

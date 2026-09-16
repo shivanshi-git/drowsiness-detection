@@ -16,6 +16,8 @@ from xai.master_explainer import MasterXAIExplainer
 
 
 CLASS_NAMES = ["Normal", "Slow Blinking", "Yawning", "Nodding", "Eye Closure"]
+# Binary class names for MRL eye-only model
+CLASS_NAMES_MRL = ["Not Drowsy", "Drowsy"]
 
 AVAILABLE_MODELS = {
     "sota": {
@@ -116,18 +118,18 @@ class StreamManager:
         self.load_model("sota")
 
     def load_model(self, model_id: str) -> bool:
-        """Loads or hot-swaps model checkpoints."""
+        """Loads or hot-swaps model checkpoints, handling binary MRL eye model."""
         if model_id not in AVAILABLE_MODELS:
             model_id = "sota"
-            
         cfg = AVAILABLE_MODELS[model_id]
         chk_path = cfg["checkpoint"]
         
         print(f"[StreamManager] Loading model: {cfg['name']} ({chk_path})")
         try:
-            # Initialize SOTA Low-Light Architecture
+            # Determine number of classes based on model type
+            num_classes = 2 if model_id == "sota_mrl" else 5
             model = LowLightDrowsinessPipeline(
-                num_classes=5,
+                num_classes=num_classes,
                 embed_dim=256,
                 sequence_length=self.seq_len,
                 enable_llformer=True
@@ -139,7 +141,7 @@ class StreamManager:
                 print(f"[StreamManager] Successfully loaded weights from {chk_path}")
             else:
                 print(f"[StreamManager] Checkpoint {chk_path} not found; running with initialized weights.")
-                
+            
             model.eval()
             self.model = model
             self.xai_engine = MasterXAIExplainer(model)
@@ -302,27 +304,30 @@ class StreamManager:
                         enh_t = (enh_t * 255.0).clip(0, 255).astype(np.uint8)
                         llformer_enhanced_bgr = cv2.cvtColor(enh_t, cv2.COLOR_RGB2BGR)
 
-            # Real-time multi-modal safety heuristics
+            # Geometry-based overrides on the cached scores
+            fatigue_score = self.cached_raw_score
+            pred_class = self.cached_pred_class
+
             if geo["ear"] < 0.16:
-                raw_score = max(raw_score, 0.82)
-                raw_pred = 4  # Eye closure / microsleep
+                fatigue_score = max(fatigue_score, 0.82)
+                pred_class = 4  # Eye closure / microsleep
             elif geo["mar"] > 0.50:
-                raw_score = max(raw_score, 0.65)
-                raw_pred = 2  # Yawning
+                fatigue_score = max(fatigue_score, 0.65)
+                pred_class = 2  # Yawning
             elif abs(geo["head_pitch"]) > 16.0:
-                raw_score = max(raw_score, 0.60)
-                raw_pred = 3  # Head nodding
+                fatigue_score = max(fatigue_score, 0.60)
+                pred_class = 3  # Head nodding
             elif geo["ear"] >= 0.22 and geo["mar"] < 0.38:
                 # Confirmed attentive state
-                raw_score = min(raw_score, 0.15)
-                raw_pred = 0  # Normal attentive
+                fatigue_score = min(fatigue_score, 0.15)
+                pred_class = 0  # Normal attentive
 
-            fatigue_score = raw_score
-            pred_class = raw_pred
-
-            # Update Adaptive Alarm
+            # Update Adaptive Alarm — pass ear & mar for yawn counting and eye-closure timer
             alarm_data = self.alarm_system.update(
-                fatigue_score, pred_class, fps=max(self.current_fps, 10.0)
+                fatigue_score, pred_class,
+                fps=max(self.current_fps, 10.0),
+                ear=geo["ear"],
+                mar=geo["mar"],
             )
 
             # Generate XAI explanation if triggered or periodically
@@ -356,7 +361,8 @@ class StreamManager:
                 "smoothed_fatigue_score": fatigue_score,
                 "perclos": 0.05,
                 "closure_duration": 0.0,
-                "predicted_class": 0
+                "predicted_class": 0,
+                "yawn_count": self.alarm_system.yawn_count,
             }
 
         # Pack aggregated metrics
@@ -368,7 +374,8 @@ class StreamManager:
             "perclos": float(np.clip(alarm_data["perclos"], 0.0, 1.0)),
             "closure_duration": float(alarm_data["closure_duration"]),
             "predicted_class": int(pred_class),
-            "class_name": CLASS_NAMES[pred_class] if pred_class < len(CLASS_NAMES) else "Normal",
+            "class_name": (CLASS_NAMES_MRL if self.active_model_id == "sota_mrl" else CLASS_NAMES)[pred_class] if pred_class < (2 if self.active_model_id == "sota_mrl" else len(CLASS_NAMES)) else (CLASS_NAMES_MRL if self.active_model_id == "sota_mrl" else CLASS_NAMES)[0],
+            "yawn_count": int(alarm_data.get("yawn_count", self.alarm_system.yawn_count)),
             "ear": float(geo["ear"]),
             "mar": float(geo["mar"]),
             "head_pitch": float(geo["head_pitch"]),

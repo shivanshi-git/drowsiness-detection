@@ -233,6 +233,13 @@ async def get_incidents():
     return {"incidents": list(manager.incident_log)}
 
 
+@app.post("/api/reset_yawns")
+async def reset_yawn_counter():
+    """Resets the session yawn counter (e.g. at start of a new trip)."""
+    manager.alarm_system.reset_yawn_count()
+    return {"status": "success", "yawn_count": 0}
+
+
 @app.get("/api/telemetry")
 async def get_telemetry():
     """Returns rolling fatigue and PERCLOS telemetry points for charts."""
